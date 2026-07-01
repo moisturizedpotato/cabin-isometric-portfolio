@@ -12,9 +12,9 @@ export function createRaycasterManager() {
     pointer.y = -(y / window.innerHeight) * 2 + 1;
   };
 
-  const getIntersections = (camera, raycasterObjects) => {
+  const getIntersections = (camera, raycasterObjects, recursive = false) => {
     raycaster.setFromCamera(pointer, camera);
-    return raycaster.intersectObjects(raycasterObjects);
+    return raycaster.intersectObjects(raycasterObjects, recursive);
   };
 
   return {

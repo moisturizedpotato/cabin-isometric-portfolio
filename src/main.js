@@ -1,85 +1,100 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createTextureLibrary, loadCabin } from './world/cabin.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { loadEnvironment } from './world/environment.js';
 import { createInputHandler } from './systems/InputHandler.js';
 import { createRenderer, createPostProcessing } from './systems/renderer.js';
 import { createRaycasterManager } from './interactions/RaycasterManager.js';
 import { Chess } from 'chess.js';
-import {gsap} from 'gsap';
-import './style.scss'
-import { Howl, Howler } from 'howler';
+import { gsap } from 'gsap';
+import './style.scss';
+import { createAudioManager } from './audio.js';
+import { createWaterStream, createSplashParticles, createBubbleGroup } from './effects.js';
+import { createAnimationQueue } from './animationQueue.js';
 
-// --- AUDIO SETUP ---
-const sounds = {
-  bgm: new Howl({ src: ['/audio/background.wav'], loop: true, volume: 0.3 }),
-  potBoil: new Howl({ src: ['/audio/boiling_pot.mp3'], loop: true, volume: 0.8 }),
-  cabinetOpen: new Howl({ src: ['/audio/cabinet_door_open.wav'] }),
-  cabinetClose: new Howl({ src: ['/audio/oven_close.wav'] }), // Reusing as requested
-  ovenOpen: new Howl({ src: ['/audio/oven_open.wav'] }),
-  ovenClose: new Howl({ src: ['/audio/oven_close.wav'] }),
-  targetHover: new Howl({ src: ['/audio/target_hover.wav'] }),
-  doorOpen: new Howl({ src: ['/audio/door_opening.mp3'] }),
-  doorClose: new Howl({ src: ['/audio/door_closing.mp3'] }),
-  drawerOpen: new Howl({ src: ['/audio/drawer_open.wav'], volume: 1.2 }),
-  drawerClose: new Howl({ src: ['/audio/drawer_close.wav'], volume: 1.2 }),
-  glass: new Howl({ src: ['/audio/glass.wav'] }),
-  laptop: new Howl({ src: ['/audio/laptop_code.wav'], volume: 0.7 }),
-  utensils: new Howl({ src: ['/audio/utensils.wav'] }),
-  bubbles: new Howl({ src: ['/audio/bubbles.mp3'] }),
-  hangingLights: new Howl({ src: ['/audio/hanging_lights.wav'], volume:0.6 }),
-  tapOpen: new Howl({ src: ['/audio/tap_open.wav'], volume: 0.5 }),
-  tapClose: new Howl({ src: ['/audio/tap_close.wav'], volume: 0.5 }),
-  uiClick: new Howl({ src: ['/audio/ui_hover.mp3'] }),
-  highlight: new Howl({src: ['/audio/tap_light.mp3'], volume: 0.5}),
-  chairSlideOff: new Howl({src: ["/audio/chair_slide_off.wav"], volume: 0.4}),
-  chairSlideIn: new Howl({src: ["/audio/chair_slide_in.wav"], volume: 0.4}),
-  pop: new Howl({ src: ['/audio/pop.wav'], volume: 1.2 }),
-  acWind: new Howl({src: ['/audio/ac_wind.wav'], volume: 0.6}),
-  whoosh: new Howl({ src: ['/audio/whoosh.mp3'] })
-};
+let canvas;
+let btnUp;
+let btnDown;
+let hud;
+let hudText;
+let sizes = { width: window.innerWidth, height: window.innerHeight };
+let audioBtn;
+let loadingText;
+let segmentsContainer;
+let enterButton;
+let loadingScreen;
 
-// Helper function to play sound at a 3D Mesh location
-function playSpatialSound(sound, mesh) {
-  if (!mesh) return;
-  const pos = new THREE.Vector3();
-  mesh.getWorldPosition(pos);
-  const id = sound.play();
-  sound.pos(pos.x, pos.y, pos.z, id);
-  // Configure 3D falloff distance
-  sound.pannerAttr({ pannerModel: 'HRTF', refDistance: 1, maxDistance: 10, rolloffFactor: 2 }, id);
-  return id;
+let raycasterManager;
+let raycaster;
+let pointer;
+let inputHandler;
+
+const loadingManager = new THREE.LoadingManager();
+let scene;
+let camera;
+let renderer;
+let controls;
+let bloomComposer;
+let finalComposer;
+let darkBackground;
+let darkenNonBloomed;
+let restoreMaterial;
+let resizePostProcessing;
+
+let sounds;
+let playSpatialSound;
+let updateListener;
+let toggleBgm;
+let runQueueAnimation;
+
+function setupAudioManager() {
+  const audioManager = createAudioManager();
+  sounds = audioManager.sounds;
+  playSpatialSound = audioManager.playSpatialSound;
+  updateListener = audioManager.updateListener;
+  toggleBgm = audioManager.toggleBgm;
+  runQueueAnimation = createAnimationQueue(gsap).runQueueAnimation;
 }
 
+function playHoverSound(type, isHovered, hitbox, targetMesh) {
+  const toggleSounds = {
+    cabinet: [sounds.cabinetOpen, sounds.cabinetClose],
+    oven: [sounds.ovenOpen, sounds.ovenClose],
+    officeChair: [sounds.chairSlideOff, sounds.chairSlideIn],
+  };
 
-const raycasterManager = createRaycasterManager();
-const { raycaster, pointer } = raycasterManager;
-const loadingManager = new THREE.LoadingManager();
+  const soundPair = toggleSounds[type];
+  if (soundPair) {
+    playSpatialSound(isHovered ? soundPair[0] : soundPair[1], targetMesh);
+    return;
+  }
+
+  if (!isHovered) return;
+
+  if (type.includes('scaleUp') || hitbox.name.includes('utensil')) {
+    playSpatialSound(sounds.utensils, targetMesh);
+  } else if (type === 'soap') {
+    playSpatialSound(sounds.bubbles, targetMesh);
+  } else if (type === 'hangingLights') {
+    playSpatialSound(targetMesh.name.includes('hanging_lights') ? sounds.hangingLights : sounds.highlight, targetMesh);
+  } else if (type === 'laptopScreen') {
+    playSpatialSound(sounds.laptop, targetMesh);
+  } else if (hitbox.name.includes('glass') && hitbox.name.includes('raycaster')) {
+    playSpatialSound(sounds.glass, targetMesh);
+  }
+}
 
 const interactables = [];
 let intersects = [];
-const doorMeshes = [];
 let currentBoardState = {};
 const chessPieces = {};
 const floor_objs = [];
-let cabinetDoors = {
-  '1': { left: null, right: null },
-  '2': { left: null, right: null }
-};
 let deadWhiteCount = -0.5 * 1.4;
 let deadBlackCount = -0.66429 * 1.4;
 let currentFloorLevel = 0; 
 const transparentOpacity = 0.2;
-let tapIsHovered = false;
 let tapWasHovered = false;
-let soapIsHovered = false;
-let isDoorOpen = false;
-let isAnimating = false;
-let doorWasHovered = { '1': false, '2': false };
 
-const doorHitboxes = [];
 const CAMERA_BOUNDS = {
   minPan: new THREE.Vector3(
 2.123708182501076,
@@ -98,85 +113,37 @@ const CAMERA_BOUNDS = {
 
 // --- NEW: WATER & SPLASH SETUP ---
 const waterStreamLength = 0.09; // Change this if the water doesn't perfectly reach the bottom of your sink!
+let waterStream;
+let splashParticles;
+let splashVelocities;
+let splashCount;
+let bubbleGroup;
+let bubblesData;
 
-// Using BoxGeometry (Cube) instead of CylinderGeometry
-const waterGeo = new THREE.BoxGeometry(0.008, 1, 0.02); 
-waterGeo.translate(0, -0.5, 0); // Translate origin to the top so it scales downwards properly
-const waterMat = new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.5 });
-const waterStream = new THREE.Mesh(waterGeo, waterMat);
-waterStream.scale.y = 0; // Start hidden (off)
+function setupEffects() {
+  waterStream = createWaterStream(waterStreamLength);
+  const splashResult = createSplashParticles();
+  splashParticles = splashResult.splashParticles;
+  splashVelocities = splashResult.splashVelocities;
+  splashCount = splashVelocities.length;
 
-// Setup cheap splash particles (Points naturally render as tiny 2D squares/cubes)
-const splashCount = 10;
-const splashGeo = new THREE.BufferGeometry();
-const splashPositions = new Float32Array(splashCount * 3);
-const splashVelocities = [];
-
-for (let i = 0; i < splashCount; i++) {
-  splashVelocities.push({
-    x: (Math.random() - 0.5) * 0.03,
-    y: Math.random() * 0.001 + 0.1,
-    z: (Math.random() - 0.5) * 0.03
-  });
-}
-splashGeo.setAttribute('position', new THREE.BufferAttribute(splashPositions, 3));
-const splashMat = new THREE.PointsMaterial({ size: 0.006, color: 0x88ddff, transparent: true, opacity: 0.8 });
-const splashParticles = new THREE.Points(splashGeo, splashMat);
-
-
-// ==========================================
-// 2. SOAP BUBBLES SETUP (SPRITE SHEET)
-// ==========================================
-const bubbleTexture = new THREE.TextureLoader().load('/images/bubble_burst_spritesheet.png');
-bubbleTexture.colorSpace = THREE.SRGBColorSpace;
-
-const bubbleGroup = new THREE.Group();
-const bubblesData = [];
-const bubbleCount = 15;
-
-for (let i = 0; i < bubbleCount; i++) {
-  const uniqueTexture = bubbleTexture.clone();
-  
-  const cols = 7;
-  const rows = 1;
-  uniqueTexture.repeat.set(1 / cols, 1 / rows); 
-  
-  const col = Math.floor(Math.random() * 2);
-  const row = 0;
-  uniqueTexture.offset.set(col * (1 / cols), row);
-
-  const bMat = new THREE.SpriteMaterial({ 
-    map: uniqueTexture, 
-    transparent: true, 
-    depthWrite: false, 
-    blending: THREE.AdditiveBlending 
-  });
-
-  const sprite = new THREE.Sprite(bMat);
-  sprite.scale.set(0.026, 0.026, 0.026); 
-  sprite.position.y = -999; // Hide underground initially
-  
-  bubbleGroup.add(sprite);
-  
-  bubblesData.push({
-    sprite: sprite,
-    phase: Math.random() * Math.PI * 2, 
-    speed: 0.0005 + (Math.random() * 0.005) 
-  });
+  const bubbleResult = createBubbleGroup(new THREE.TextureLoader(), '/images/bubble_burst_spritesheet.png');
+  bubbleGroup = bubbleResult.bubbleGroup;
+  bubblesData = bubbleResult.bubblesData;
 }
 
-
-const canvas = document.querySelector('#experience-canvas');
-const btnUp = document.getElementById('btn-floor-up');
-const btnDown = document.getElementById('btn-floor-down');
-const hud = document.getElementById('hover-hud');
-const hudText = document.getElementById('hud-text');
-const sizes = { width: window.innerWidth, height: window.innerHeight };
-const audioBtn = document.getElementById('audio-toggle');
-const loadingText = document.getElementById('loading-text');
-const segmentsContainer = document.getElementById('loading-bar-segments');
-const enterButton = document.getElementById('enter-button');
-const loadingScreen = document.getElementById('loading-screen');
+function bindDomElements() {
+  canvas = document.querySelector('#experience-canvas');
+  btnUp = document.getElementById('btn-floor-up');
+  btnDown = document.getElementById('btn-floor-down');
+  hud = document.getElementById('hover-hud');
+  hudText = document.getElementById('hud-text');
+  audioBtn = document.getElementById('audio-toggle');
+  loadingText = document.getElementById('loading-text');
+  segmentsContainer = document.getElementById('loading-bar-segments');
+  enterButton = document.getElementById('enter-button');
+  loadingScreen = document.getElementById('loading-screen');
+}
 
 loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
   const progress = (itemsLoaded / itemsTotal) * 100;
@@ -186,7 +153,7 @@ loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
   const numSegments = Math.floor((progress / 100) * 12);
   segmentsContainer.innerHTML = ''; // Clear old segments
   
-  for(let i = 0; i < numSegments; i++) {
+  for (let i = 0; i < numSegments; i += 1) {
     const seg = document.createElement('div');
     seg.className = 'segment';
     segmentsContainer.appendChild(seg);
@@ -194,50 +161,46 @@ loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
 };
 let bgmPlaying = false;
 
-const scene = new THREE.Scene();
-const clock = new THREE.Clock();
+let clock;
+let chess;
+let history;
 
-const chess = new Chess();
-chess.loadPgn('1. d4 Nf6 2. c4 d5 3. Nc3 Bf5 4. Qa4+ Bd7 5. Qb3 dxc4 6. Qxc4 Be6 7. Qb5+ Bd7 8.Qd3 a6 9. e4 e6 10. Nf3 Bb4 11. Qc2 O-O 12. Bg5 h6 13. Bh4 Bxc3+ 14. bxc3 g5 15.Nxg5 hxg5 16. Bxg5 Kg7 17. e5 Kg8 18. Bxf6 Qe8 19. Bd3 Bc6 20. Bh7# 1-0');
-const history = chess.history({ verbose: true });
+function setupScene() {
+  scene = new THREE.Scene();
+  clock = new THREE.Clock();
+  chess = new Chess();
+  chess.loadPgn('1. d4 Nf6 2. c4 d5 3. Nc3 Bf5 4. Qa4+ Bd7 5. Qb3 dxc4 6. Qxc4 Be6 7. Qb5+ Bd7 8.Qd3 a6 9. e4 e6 10. Nf3 Bb4 11. Qc2 O-O 12. Bg5 h6 13. Bh4 Bxc3+ 14. bxc3 g5 15.Nxg5 hxg5 16. Bxg5 Kg7 17. e5 Kg8 18. Bxf6 Qe8 19. Bd3 Bc6 20. Bh7# 1-0');
+  history = chess.history({ verbose: true });
+}
 
-scene.background = new THREE.Color('#111111'); // Dark grey background
+function setupRendererAndCamera() {
+  scene.background = new THREE.Color('#111111'); // Dark grey background
 
-const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100);
-// camera.position.set(
-// 2.7398029971484745,
-// 0.8794004125894785,
-// -2.9957373670464307);
-camera.position.set(
-5.811391771542539,
-2.4932501863561063,
--3.156645731723698);
+  camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100);
+  camera.position.set(5.811391771542539, 2.4932501863561063, -3.156645731723698);
 
-const renderer = createRenderer(canvas, sizes);
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-// controls.target.set( 
-// 2.5546474760257314,
-// 0.002700000017881676,
-// 0.3137892400795657);
-controls.target.set( 
-2.554647,
-0.0027,
-0.313789);
+  renderer = createRenderer(canvas, sizes);
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.enableRotate = true;
+  controls.enableZoom = true;
+  controls.enablePan = false;
+  controls.touches.ONE = THREE.TOUCH.ROTATE;
+  controls.touches.TWO = THREE.TOUCH.DOLLY;
+  controls.target.set(2.554647, 0.0027, 0.313789);
 
-const isMobile = window.innerWidth < 768;
-  
-  // Base position
+  const isMobile = window.innerWidth < 768;
   const camX = 5.811;
   const camY = 2.493;
   const camZ = -3.156;
-
-  // If mobile, pull the camera back slightly by multiplying Z and X
-  const mobileOffset = isMobile ? 1.5 : 1.0; 
+  const mobileOffset = isMobile ? 1.5 : 1.0;
   camera.position.set(camX * mobileOffset, camY, camZ * mobileOffset);
+}
 
-const textureLoader = new THREE.TextureLoader();
-const { textureMap, loadedTextures } = createTextureLibrary(textureLoader);
+function setupPostProcessing() {
+  ({ bloomComposer, finalComposer, darkBackground, darkenNonBloomed, restoreMaterial, resizePostProcessing } =
+    createPostProcessing(scene, camera, renderer, sizes));
+}
 
 const dracoLoader = new DRACOLoader();
 dracoLoader.setDecoderPath('/draco/');
@@ -245,109 +208,84 @@ dracoLoader.setDecoderPath('/draco/');
 const gltfLoader = new GLTFLoader(loadingManager);
 gltfLoader.setDRACOLoader(dracoLoader);
 
-function runQueueAnimation(targetMesh, wantsOpen, Axis, targetValue, animType = 'rotation', duration = 0.5) {
-  // 1. Record desired state
-  targetMesh.userData.wantsOpen = wantsOpen;
-  // 2. Create runner if it doesn't exist
-  if (!targetMesh.userData.runAnimation) {
-    targetMesh.userData.runAnimation = () => {
-      if (targetMesh.userData.isAnimating) return;
-      const isOpen = targetMesh.userData.isOpen || false;
-      const currentlyWantsOpen = targetMesh.userData.wantsOpen;
-      
-      // If it's already in the correct state, do nothing
-      if (isOpen === currentlyWantsOpen) return;
-      targetMesh.userData.isAnimating = true;
-  if (animType === 'customRotation') {
-        const customAxis = new THREE.Vector3(1, 0, 0).normalize();
-        gsap.to(targetMesh.userData, {
-          customAngle: currentlyWantsOpen ? -Math.PI / 2 : 0,
-          duration: duration, 
-          ease: "power2.out",
-          overwrite: true,
-          onUpdate: () => {
-            const q = new THREE.Quaternion().setFromAxisAngle(customAxis, targetMesh.userData.customAngle);
-            targetMesh.quaternion.copy(targetMesh.userData.initialQuaternion);
-            targetMesh.quaternion.multiply(q);
-          },
-          onComplete: () => {
-            targetMesh.userData.isAnimating = false;
-            targetMesh.userData.isOpen = currentlyWantsOpen;
-            targetMesh.userData.runAnimation(); 
-          }
-        });
-      } 
-      // --- 2. Material Color / Emissive ---
-      else if (animType === 'color') {
-        const targetBrightness = currentlyWantsOpen ? targetValue : 1.0;
-        gsap.to(targetMesh.material.color, {
-          r: targetBrightness,
-          g: targetBrightness,
-          b: targetBrightness,
-          duration: duration,
-          ease: "power2.out",
-          overwrite: true,
-          onComplete: () => {
-            targetMesh.userData.isAnimating = false;
-            targetMesh.userData.isOpen = currentlyWantsOpen;
-            targetMesh.userData.runAnimation(); 
-          }
-        });
-      } 
-      else if (animType === "translation") {
-        const initialPos = targetMesh.userData.initialPos;
-        gsap.to(targetMesh.position, {
-          [Axis]: currentlyWantsOpen ? initialPos[Axis] + targetValue: initialPos[Axis],
-          duration: duration,
-          ease: "power1.inOut",
-          onComplete: () => {
-            targetMesh.userData.isAnimating = false;
-            targetMesh.userData.isOpen = currentlyWantsOpen;
-            targetMesh.userData.runAnimation(); 
-          }
-        });
-      }
-      else if (animType === "scale") {
-        const initialScale = targetMesh.userData.initialScale;
-        gsap.to(targetMesh.scale, {
-          x: currentlyWantsOpen ? initialScale.x * targetValue : initialScale.x,
-          y: currentlyWantsOpen ? initialScale.y * targetValue : initialScale.y,
-          z: currentlyWantsOpen ? initialScale.z * targetValue : initialScale.z,
-          duration: duration,
-          ease: "power1.out",
-          onComplete: () => {
-            targetMesh.userData.isAnimating = false;
-            targetMesh.userData.isOpen = currentlyWantsOpen;
-            targetMesh.userData.runAnimation(); 
-          }
-        });
-      }
-      // --- 3. Standard Euler Rotation ---
-      else {
-        const initialRot = targetMesh.userData.initialRot;
-        gsap.to(targetMesh.rotation, {
-          [Axis]: currentlyWantsOpen ? initialRot[Axis] + targetValue : initialRot[Axis],
-          duration: duration,
-          ease: "power2.out",
-          overwrite: true,
-          onComplete: () => {
-            targetMesh.userData.isAnimating = false;
-            targetMesh.userData.isOpen = currentlyWantsOpen;
-            targetMesh.userData.runAnimation(); 
-          }
-        });
-      }
-    };
-  }
-  // 3. Execute queue
-  targetMesh.userData.runAnimation();
-}
-
-// At the top of your file
 let shiftPressed = false;
 
-window.addEventListener('keydown', (e) => { if(e.key === 'Shift') shiftPressed = true; });
-window.addEventListener('keyup', (e) => { if(e.key === 'Shift') shiftPressed = false; });
+let windowKeyDownHandler;
+let windowKeyUpHandler;
+let windowTouchStartHandler;
+let windowTouchMoveHandler;
+let windowTouchEndHandler;
+let windowResizeHandler;
+let btnUpClickHandler;
+let btnDownClickHandler;
+let audioBtnClickHandler;
+let enterButtonClickHandler;
+
+function bindUiEventHandlers() {
+  if (btnUp && btnDown) {
+    btnUpClickHandler = () => {
+      sounds.uiClick.play();
+      if (currentFloorLevel < 2) {
+        currentFloorLevel++;
+        gsap.to(camera.position, { y: camera.position.y + 0.1, duration: 0.5, ease: 'power2.out' });
+        updateFloorOpacity();
+      }
+    };
+    btnUp.addEventListener('click', btnUpClickHandler);
+
+    btnDownClickHandler = () => {
+      sounds.uiClick.play();
+      if (currentFloorLevel > 0) {
+        currentFloorLevel--;
+        gsap.to(camera.position, { y: camera.position.y - 0.1, duration: 0.5, ease: 'power2.out' });
+        updateFloorOpacity();
+      }
+    };
+    btnDown.addEventListener('click', btnDownClickHandler);
+  }
+
+  if (audioBtn) {
+    audioBtnClickHandler = () => {
+      if (sounds.uiClick) sounds.uiClick.play();
+      bgmPlaying = toggleBgm(bgmPlaying);
+      audioBtn.innerText = bgmPlaying ? 'TURN: OFF' : 'TURN: ON';
+    };
+    audioBtn.addEventListener('click', audioBtnClickHandler);
+  } else {
+    console.warn('Could not find the #audio-toggle button in the HTML!');
+  }
+}
+
+function unbindUiEventHandlers() {
+  if (btnUp && btnUpClickHandler) btnUp.removeEventListener('click', btnUpClickHandler);
+  if (btnDown && btnDownClickHandler) btnDown.removeEventListener('click', btnDownClickHandler);
+  if (audioBtn && audioBtnClickHandler) audioBtn.removeEventListener('click', audioBtnClickHandler);
+  if (enterButton && enterButtonClickHandler) enterButton.removeEventListener('click', enterButtonClickHandler);
+}
+
+function setupRaycasterAndInput() {
+  raycasterManager = createRaycasterManager();
+  raycaster = raycasterManager.raycaster;
+  pointer = raycasterManager.pointer;
+
+  inputHandler = createInputHandler({
+    onInteraction: {
+      updatePointer: (nextPointer) => {
+        pointer.x = nextPointer.x;
+        pointer.y = nextPointer.y;
+      },
+      handle: handleRaycasterInteraction
+    }
+  });
+
+  inputHandler.bind();
+}
+
+function cleanup() {
+  removeGlobalEventListeners();
+  unbindUiEventHandlers();
+  if (inputHandler?.unbind) inputHandler.unbind();
+}
 
 function updateCameraConstraints() {
   // 1. Zoom/Dolly Lock (Using minDistance/maxDistance on OrbitControls)
@@ -380,190 +318,147 @@ function adjustHudForMobile() {
 }
 // --- 4. THE GRAND ENTRANCE EVENT ---
 // to be joined with input handlers
-if (btnUp && btnDown) {
-  btnUp.addEventListener('click', () => {
-    sounds.uiClick.play();
-    if (currentFloorLevel < 2) {
-      currentFloorLevel++;
-      gsap.to(camera.position, {'y': camera.position.y + 0.1, duration: 0.5, ease: "power2.out"});
-      updateFloorOpacity();
-    }
-  });
-  btnDown.addEventListener('click', () => {
-    sounds.uiClick.play();
-    if (currentFloorLevel > 0) {
-      currentFloorLevel--;
-      gsap.to(camera.position, {'y': camera.position.y - 0.1, duration: 0.5, ease: "power2.out"});
-      updateFloorOpacity();
-    }
-  });
-}
+// UI event bindings are handled by bindUiEventHandlers()
 
-if (audioBtn) {
-  audioBtn.addEventListener('click', () => {
-    console.log("Toggle clicked! Music was playing:", bgmPlaying);
-    
-    if (sounds.uiClick) sounds.uiClick.play();
-    
-    if (bgmPlaying) {
-      // Turn music OFF
-      if (sounds.bgm) sounds.bgm.pause();
-      audioBtn.innerText = 'TURN: ON';
-    } else {
-      // Turn music ON
-      if (sounds.bgm) sounds.bgm.play();
-      audioBtn.innerText = 'TURN: OFF';
-    }
-    
-    // Flip the state
-    bgmPlaying = !bgmPlaying; 
-  });
-} else {
-  console.warn("Could not find the #audio-toggle button in the HTML!");
-}
 function handleRaycasterInteraction() {
-  if (intersects.length > 0) {
-    const object = intersects[0].object;
-    if (!object.name.includes('target')) return;
-    const {Axis, initialRot} = object.userData;
-    const targetMesh = object.userData.targets[0];
-    if (object.userData.type === "frontDoor") {
-      object.userData.wantsOpen = !object.userData.wantsOpen
-      if (object.userData.wantsOpen) playSpatialSound(sounds.doorOpen, targetMesh);
-      else playSpatialSound(sounds.doorClose, targetMesh);
-      runQueueAnimation(targetMesh, object.userData.wantsOpen, Axis, Math.PI / 2, 'rotation', 1.0);
-    }
-    if (object.userData.type === "drawer1" || object.userData.type === "drawer2") {
-      object.userData.wantsOpen = !object.userData.wantsOpen
-      if (object.userData.wantsOpen) playSpatialSound(sounds.drawerOpen, targetMesh);
-      else playSpatialSound(sounds.drawerClose, targetMesh);
-      runQueueAnimation(targetMesh, object.userData.wantsOpen, Axis, -0.12, 'translation', 1.0);
-    }
-    if (object.userData.type === "drawer3") {
-      object.userData.wantsOpen = !object.userData.wantsOpen
-      if (object.userData.wantsOpen) playSpatialSound(sounds.drawerOpen, targetMesh);
-      else playSpatialSound(sounds.drawerClose, targetMesh);
-      runQueueAnimation(targetMesh, object.userData.wantsOpen, Axis, -0.14, 'translation', 1.0);
-    }
-    if (object.userData.type === "drawer4") {
-      object.userData.wantsOpen = !object.userData.wantsOpen
-      if (object.userData.wantsOpen) playSpatialSound(sounds.drawerOpen, targetMesh);
-      else playSpatialSound(sounds.drawerClose, targetMesh);
-      runQueueAnimation(targetMesh, object.userData.wantsOpen, Axis, -0.16, 'translation', 1.0);
-    }
-    if (object.userData.type === "wardrobe") {
-      object.userData.wantsOpen = !object.userData.wantsOpen;
-      if (object.userData.wantsOpen) playSpatialSound(sounds.cabinetOpen, targetMesh);
-      else playSpatialSound(sounds.cabinetClose, targetMesh);
-      runQueueAnimation(targetMesh, object.userData.wantsOpen, Axis, Math.PI / 3, 'rotation', 0.5);
-    }
-  }
+  if (intersects.length === 0) return;
+
+  const object = intersects[0].object;
+  if (!object.name.includes('target')) return;
+
+  const targetMesh = object.userData.targets?.[0];
+  if (!targetMesh) return;
+
+  const interactionDefinitions = {
+    frontDoor: { open: sounds.doorOpen, close: sounds.doorClose, targetValue: Math.PI / 2, animType: 'rotation', duration: 1.0 },
+    drawer1: { open: sounds.drawerOpen, close: sounds.drawerClose, targetValue: -0.12, animType: 'translation', duration: 1.0 },
+    drawer2: { open: sounds.drawerOpen, close: sounds.drawerClose, targetValue: -0.12, animType: 'translation', duration: 1.0 },
+    drawer3: { open: sounds.drawerOpen, close: sounds.drawerClose, targetValue: -0.14, animType: 'translation', duration: 1.0 },
+    drawer4: { open: sounds.drawerOpen, close: sounds.drawerClose, targetValue: -0.16, animType: 'translation', duration: 1.0 },
+    wardrobe: { open: sounds.cabinetOpen, close: sounds.cabinetClose, targetValue: Math.PI / 3, animType: 'rotation', duration: 0.5 },
+  };
+
+  const currentType = object.userData.type;
+  const definition = interactionDefinitions[currentType];
+  if (!definition) return;
+
+  object.userData.wantsOpen = !object.userData.wantsOpen;
+  playSpatialSound(object.userData.wantsOpen ? definition.open : definition.close, targetMesh);
+  runQueueAnimation(targetMesh, object.userData.wantsOpen, object.userData.Axis, definition.targetValue, definition.animType, definition.duration);
 }
-
-const inputHandler = createInputHandler({
-  onInteraction: {
-    updatePointer: (nextPointer) => {
-      pointer.x = nextPointer.x;
-      pointer.y = nextPointer.y;
-    },
-    handle: handleRaycasterInteraction
-  }
-});
-
-inputHandler.bind();
-
-const { bloomComposer, finalComposer, darkBackground, darkenNonBloomed, restoreMaterial, resizePostProcessing } = createPostProcessing(scene, camera, renderer, sizes);
 
 const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
 const moveSpeed = 3.0; // Units per second
-
-window.addEventListener('keydown', (event) => {
-  const key = event.key.toLowerCase();
-  if (keys.hasOwnProperty(key)) keys[key] = true;
-});
-
-window.addEventListener('keyup', (event) => {
-  const key = event.key.toLowerCase();
-  if (keys.hasOwnProperty(key)) keys[key] = false;
-});
-
-// window.addEventListener("click", (event) => {
-//   if (currentIntersects.length > 0)
-//   {
-//     if (currentIntersects[0].object.name.includes('d7'))
-//     {
-//       currentIntersects[0].object.position.z -= 0.01;
-//     }
-//   }
-// });
-
 let lastTap = 0;
-let touchPanning = false;
-let startTouch = new THREE.Vector2();
+let touchMode = 'rotate';
+let touchStart = new THREE.Vector2();
+let touchStartDistance = 0;
+let touchActive = false;
 
-window.addEventListener('touchstart', (event) => {
-  const currentTime = new Date().getTime();
-  const tapLength = currentTime - lastTap;
+function getTouchDistance(touch1, touch2) {
+  const dx = touch2.clientX - touch1.clientX;
+  const dy = touch2.clientY - touch1.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
-  // Detect Double Tap (within 300ms)
-  if (tapLength < 300 && tapLength > 0) {
-    event.preventDefault();
-    touchPanning = true;
-    startTouch.set(event.touches[0].clientX, event.touches[0].clientY);
-    
-    // Switch OrbitControls to PAN
-    controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
-    controls.enableDamping = false;
-  }
-  lastTap = currentTime;
-});
+function setupGlobalEventListeners() {
+  windowKeyDownHandler = (event) => {
+    const key = event.key.toLowerCase();
+    if (keys.hasOwnProperty(key)) keys[key] = true;
+    if (event.key === 'Shift') shiftPressed = true;
+  };
+  window.addEventListener('keydown', windowKeyDownHandler);
 
-window.addEventListener('touchmove', (event) => {
-  if (touchPanning) {
-    // Optional: add a small deadzone to prevent jitter
-    // The browser handles the actual camera movement since we set mouseButtons to PAN
-  }
-}, { passive: false });
+  windowKeyUpHandler = (event) => {
+    const key = event.key.toLowerCase();
+    if (keys.hasOwnProperty(key)) keys[key] = false;
+    if (event.key === 'Shift') shiftPressed = false;
+  };
+  window.addEventListener('keyup', windowKeyUpHandler);
 
-window.addEventListener('touchend', () => {
-  if (touchPanning) {
-    touchPanning = false;
-    
-    // Switch back to ROTATE
-    controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
-    controls.enableDamping = true;
-  }
-});
+  windowTouchStartHandler = (event) => {
+    const currentTime = Date.now();
+    const tapLength = currentTime - lastTap;
 
-window.addEventListener('resize', () => {
-  sizes.width = window.innerWidth;
-  sizes.height = window.innerHeight;
+    if (event.touches.length === 2) {
+      touchMode = 'zoom';
+      touchActive = true;
+      controls.touches.TWO = THREE.TOUCH.DOLLY;
+      touchStartDistance = getTouchDistance(event.touches[0], event.touches[1]);
+      event.preventDefault();
+    } else if (event.touches.length === 1) {
+      if (tapLength > 0 && tapLength < 250) {
+        touchMode = 'pan';
+        controls.touches.ONE = THREE.TOUCH.PAN;
+        controls.enablePan = true;
+        event.preventDefault();
+      } else {
+        touchMode = 'rotate';
+        controls.touches.ONE = THREE.TOUCH.ROTATE;
+        controls.enablePan = false;
+      }
+      touchActive = true;
+      touchStart.set(event.touches[0].clientX, event.touches[0].clientY);
+    }
 
-  resizePostProcessing(sizes.width, sizes.height);
+    lastTap = currentTime;
+  };
+  window.addEventListener('touchstart', windowTouchStartHandler, { passive: false });
 
-  camera.aspect = sizes.width / sizes.height;
-  const isMobile = sizes.width < 768;
-  const mobileOffset = isMobile ? 1.5 : 1.0;
-  
-  // Set position based on screen type
-  camera.position.x = 5.811 * mobileOffset;
-  camera.position.z = -3.756 * mobileOffset;
-  camera.updateProjectionMatrix();
-  adjustHudForMobile();
-  renderer.setSize(sizes.width, sizes.height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-});
+  windowTouchMoveHandler = (event) => {
+    if (!touchActive) return;
 
-const RaycasterManager = {
-  update(pointer, camera) {
-    raycaster.setFromCamera(pointer, camera);
-    intersects = raycaster.intersectObjects(interactables, false);
-    document.body.style.cursor = intersects.length > 0 && intersects[0].object.name.includes('target')
-      ? 'pointer'
-      : 'default';
-    return intersects;
-  },
-};
+    if (touchMode === 'pan') {
+      event.preventDefault();
+      // OrbitControls will handle one-finger pan while ONE is set to TOUCH.PAN.
+    }
+
+    if (touchMode === 'zoom' && event.touches.length === 2) {
+      event.preventDefault();
+      const nextDistance = getTouchDistance(event.touches[0], event.touches[1]);
+      const delta = nextDistance - touchStartDistance;
+      touchStartDistance = nextDistance;
+      // Let OrbitControls handle pinch zoom if touches.TWO is set to DOLLY.
+    }
+  };
+  window.addEventListener('touchmove', windowTouchMoveHandler, { passive: false });
+
+  windowTouchEndHandler = () => {
+    touchActive = false;
+    touchMode = 'rotate';
+    controls.touches.ONE = THREE.TOUCH.ROTATE;
+    controls.enablePan = false;
+  };
+  window.addEventListener('touchend', windowTouchEndHandler);
+
+  windowResizeHandler = () => {
+    sizes.width = window.innerWidth;
+    sizes.height = window.innerHeight;
+
+    resizePostProcessing(sizes.width, sizes.height);
+
+    camera.aspect = sizes.width / sizes.height;
+    const isMobile = sizes.width < 768;
+    const mobileOffset = isMobile ? 1.5 : 1.0;
+
+    camera.position.x = 5.811 * mobileOffset;
+    camera.position.z = -3.756 * mobileOffset;
+    camera.updateProjectionMatrix();
+    adjustHudForMobile();
+    renderer.setSize(sizes.width, sizes.height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  };
+  window.addEventListener('resize', windowResizeHandler);
+}
+
+function removeGlobalEventListeners() {
+  if (windowKeyDownHandler) window.removeEventListener('keydown', windowKeyDownHandler);
+  if (windowKeyUpHandler) window.removeEventListener('keyup', windowKeyUpHandler);
+  if (windowTouchStartHandler) window.removeEventListener('touchstart', windowTouchStartHandler);
+  if (windowTouchMoveHandler) window.removeEventListener('touchmove', windowTouchMoveHandler, { passive: false });
+  if (windowTouchEndHandler) window.removeEventListener('touchend', windowTouchEndHandler);
+  if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
+}
 
 const PostProcessing = {
   render() {
@@ -586,12 +481,105 @@ const PostProcessing = {
 function updateFloorOpacity() {
   floor_objs.forEach((obj) => {
     if (obj.name.includes('floor_1')) {
-      const target = currentFloorLevel >= 1 ? 1.0: transparentOpacity;
+      const target = currentFloorLevel >= 1 ? 1.0 : transparentOpacity;
       gsap.to(obj.material, { opacity: target, duration: 0.5, ease: "power2.inOut" });
     } else if (obj.name.includes('floor_2')) {
       const target = currentFloorLevel >= 2 ? 1.0 : transparentOpacity;
       gsap.to(obj.material, { opacity: target, duration: 0.5, ease: "power2.inOut" });
     }
+  });
+}
+
+const TAP_ROTATION_VALUE = Math.PI / 4;
+const WATER_STREAM_OPEN_DURATION = 0.2;
+const WATER_STREAM_CLOSE_DURATION = 0.25;
+
+function ensureWaterEffects(targetPosition) {
+  if (!targetPosition) return;
+  if (!waterStream.parent) scene.add(waterStream);
+  if (!splashParticles.parent) scene.add(splashParticles);
+  waterStream.position.copy(targetPosition);
+  waterStream.position.y -= waterStreamLength;
+  splashParticles.position.copy(targetPosition);
+  splashParticles.position.y -= waterStreamLength;
+  waterStream.scale.y = 0;
+}
+
+function setWaterFlow(on, targetPosition) {
+  if (!targetPosition) return;
+  gsap.killTweensOf([waterStream.scale, waterStream.position]);
+  if (on) {
+    gsap.to(waterStream.scale, { y: waterStreamLength, duration: WATER_STREAM_OPEN_DURATION, ease: 'power1.inOut' });
+  } else {
+    gsap.to(waterStream.position, { y: targetPosition.y - waterStreamLength, duration: WATER_STREAM_CLOSE_DURATION, ease: 'power2.in' });
+    gsap.to(waterStream.scale, { y: 0, duration: WATER_STREAM_CLOSE_DURATION, ease: 'power2.in' });
+  }
+}
+
+function handleTapHoverState(valveHitbox, bodyHitbox, isHovered) {
+  if (!valveHitbox || isHovered === tapWasHovered) return;
+
+  tapWasHovered = isHovered;
+  playSpatialSound(isHovered ? sounds.tapOpen : sounds.tapClose, valveHitbox);
+
+  valveHitbox.userData.targets?.forEach((targetMesh) => {
+    runQueueAnimation(targetMesh, isHovered, valveHitbox.userData.Axis, TAP_ROTATION_VALUE, 'rotation', 0.3);
+  });
+
+  const targetPos = bodyHitbox?.userData?.targets?.[0]?.position;
+  ensureWaterEffects(targetPos);
+  setWaterFlow(isHovered, targetPos);
+}
+
+function handleHoverInteraction(hitbox, isHovered) {
+  if (isHovered === hitbox.userData.isHovered) return;
+  hitbox.userData.isHovered = isHovered;
+  const { type, targets, Axis } = hitbox.userData;
+  if (!targets) return;
+
+  if (isHovered && hitbox.name.includes('target')) {
+    playSpatialSound(sounds.targetHover, hitbox);
+  }
+
+  targets.forEach((targetMesh) => {
+    playHoverSound(type, isHovered, hitbox, targetMesh);
+
+    if (type === 'hangingLights') {
+      if (targetMesh.material) {
+        runQueueAnimation(targetMesh, isHovered, null, 3.5, 'color', 0.4);
+      }
+      return;
+    }
+
+    if (type.includes('scaleUp') && !targetMesh.name.includes('pot')) {
+      runQueueAnimation(targetMesh, isHovered, Axis, 1.2, 'scale', 0.2);
+      if (type === 'scaleUpRotate') {
+        gsap.to(targetMesh.rotation, {
+          z: targetMesh.userData.initialRot.z + (isHovered ? -Math.PI / 6 : 0),
+          duration: 0.3,
+          ease: 'power2.out'
+        });
+      }
+      return;
+    }
+
+    let targetValue = 0;
+    let duration = 0.5;
+    let animType = 'rotation';
+
+    if (type === 'cabinet' || type === 'oven') {
+      targetValue = (Math.PI / 2) * (targetMesh.userData.swingDirection || 1);
+      if (targetMesh.name === 'oven_2_glass_second') {
+        animType = 'customRotation';
+        duration = 1.0;
+      }
+    } else if (type === 'officeChair') {
+      targetValue = Math.PI / 6;
+    } else {
+      return;
+    }
+
+    runQueueAnimation(targetMesh, isHovered, Axis, targetValue, animType, duration);
   });
 }
 
@@ -730,6 +718,25 @@ function resetChessGame() {
 }
 
 async function init() {
+  bindDomElements();
+  setupAudioManager();
+  setupScene();
+  setupEffects();
+  setupRendererAndCamera();
+  bindUiEventHandlers();
+  setupRaycasterAndInput();
+  setupPostProcessing();
+  setupGlobalEventListeners();
+
+  adjustHudForMobile();
+
+  const [{ createTextureLibrary, loadCabin }, { loadEnvironment }] = await Promise.all([
+    import('./world/cabin.js'),
+    import('./world/environment.js')
+  ]);
+
+  const textureLoader = new THREE.TextureLoader();
+  const { textureMap, loadedTextures } = createTextureLibrary(textureLoader);
 
   const environmentPromise = loadEnvironment(scene, loadingManager);
   const cabinPromise = loadCabin({ 
@@ -805,38 +812,10 @@ async function init() {
       repeat: -1,
       ease: "sine.inOut"
     });
-  // if (tapBody) {
-  //   waterStream.position.copy(tapBody.position);
-  //   scene.add(waterStream);
-    
-  //   // Position particles at the bottom of the stream
-  //   splashParticles.position.copy(tapBody.position);
-  //   splashParticles.position.y -= waterStreamLength; 
-  //   scene.add(splashParticles);
-  // }
+  }
 
-  const finalCameraPos = { 
-x
-: 
-2.535919813773918,
-y
-: 
-0.9578030790152989,
-z
-: 
--2.6902596403193235 };
-  const finalLookAt = { 
-x
-: 
-2.5497777489426516,
-y
-: 
-0.2553570744324973,
-z
-: 
-0.04026464001318965 };
-controls.enabled = false;
-const scaleUpItems = [];
+  controls.enabled = false;
+  const scaleUpItems = [];
   interactables.forEach(hitbox => {
     if (hitbox.userData.type && hitbox.userData.type.toLowerCase().includes('scaleup')) {
       if (hitbox.userData.targets) {
@@ -930,8 +909,6 @@ const scaleUpItems = [];
   });
   // ------------------------------
     
-  }
-
   // 3. The Animation Loop
   const render = () => {
     // console.log(camera.position);
@@ -993,173 +970,34 @@ const scaleUpItems = [];
       ac_flap.rotation.y = ac_flap.userData.initialRotation.y + (Math.sin(1.0 * elapsedTime) * Math.PI / 6);
     }
 
-    //hover events
-    RaycasterManager.update(pointer, camera);
+    // hover events
+    intersects = raycasterManager.getIntersections(camera, interactables);
+    document.body.style.cursor = intersects.length > 0 && intersects[0].object.name.includes('target') ? 'pointer' : 'default';
     const hoveredObject = intersects.length > 0 ? intersects[0].object : null;
 
     // Only show HUD if we hit an object with a 'target' name
-    if (hoveredObject && hoveredObject.name.includes('target')) {
+    const hoveredHitbox = intersects.length > 0 ? intersects[0].object : null;
+    if (hoveredHitbox?.name.includes('target')) {
       hud.style.display = 'flex';
       
       // Position the HUD near the cursor (with a small offset)
-      hud.style.left = ((pointer.x + 1)* sizes.width) / 2  + 20 + 'px';
-      hud.style.top = ((-pointer.y + 1)* sizes.height) / 2 + 'px';
-      // Set the text based on the object's name
-      const info = hoveredObject.name.replace(/_/g, ' ').replace('target', '');
+      hud.style.left = ((pointer.x + 1) * sizes.width) / 2 + 20 + 'px';
+      hud.style.top = ((-pointer.y + 1) * sizes.height) / 2 + 'px';
+      const info = hoveredHitbox.name.replace(/_/g, ' ').replace('target', '');
       hudText.innerText = info;
     } else {
-      // Hide the HUD if we aren't hovering over a target
       hud.style.display = 'none';
     }
-    raycaster.camera = camera;
-    const hoveredHitbox = intersects.length > 0 ? intersects[0].object : null;
+
     const tapIsHovered = hoveredHitbox?.userData.type === 'tap';
+    const valveHitbox = interactables.find(h => h.userData.type === 'tapValve' && h.name.toLowerCase().includes('valve'));
+    const bodyHitbox = interactables.find(h => h.userData.type === 'tap' && h.name.toLowerCase().includes('body'));
 
-    // --- 1. TAP ANIMATION (Grouped) ---
-    if (tapIsHovered !== tapWasHovered) {
-      tapWasHovered = tapIsHovered;
-    
-      // Find the valve specifically to animate it
-      const valveHitbox = interactables.find(h => h.userData.type === 'tapValve' && h.name.toLowerCase().includes('valve'));
-      if (tapIsHovered) playSpatialSound(sounds.tapOpen, valveHitbox);
-      else playSpatialSound(sounds.tapClose, valveHitbox);
-      if (valveHitbox && valveHitbox.userData.targets) {
-        const { targets, Axis } = valveHitbox.userData;
-        
-        targets.forEach((targetMesh) => {
-          runQueueAnimation(targetMesh, tapIsHovered, Axis, Math.PI / 4, 'rotation', 0.3);
-        });
-      }
-    
-      // Water Stream Logic
-      const bodyHitbox = interactables.find(h => h.userData.type === 'tap' && h.name.toLowerCase().includes('body'));
-      if (bodyHitbox && bodyHitbox.userData.targets) {
-        const targetPos = bodyHitbox.userData.targets[0].position;
-            
-        // Position the stream exactly at the tap
-        waterStream.position.copy(targetPos);
-            
-        // VERY IMPORTANT: Make sure it starts completely hidden!
-        waterStream.scale.y = 0; 
-        // Wait to move it up so it scales downward nicely when turned on
-        waterStream.position.y -= waterStreamLength; 
-            
-        scene.add(waterStream);
-            
-        // Position the splash particles at the bottom where the sink basin is
-        splashParticles.position.copy(targetPos);
-        splashParticles.position.y -= waterStreamLength; 
-        scene.add(splashParticles);
-      }
-      if (bodyHitbox && bodyHitbox.userData.targets && bodyHitbox.userData.targets.length > 0) {
-        const targetPos = bodyHitbox.userData.targets[0].position;
-        gsap.killTweensOf([waterStream.scale, waterStream.position]);
-        if (tapIsHovered) {
-          if (tapIsHovered) playSpatialSound(sounds.tapOpen, valveHitbox);
-          else playSpatialSound(sounds.tapClose, bodyHitbox);
-          waterStream.position.copy(targetPos);
-          gsap.to(waterStream.scale, { y: waterStreamLength, duration: 0.2, ease: "power1.inOut" });
-        } else {
-          // TURN OFF: Detach top and fall into the sink
-          gsap.to(waterStream.position, { 
-            y: targetPos.y - waterStreamLength, 
-            duration: 0.25, 
-            ease: "power2.in" // Accelerates as it falls (like gravity)
-          });
-
-          gsap.to(waterStream.scale, { 
-            y: 0, 
-            duration: 0.25, 
-            ease: "power2.in" 
-          });
-        }
-      }
-    }
+    handleTapHoverState(valveHitbox, bodyHitbox, tapIsHovered);
 
     interactables.forEach((hitbox) => {
-      const isHovered = (hitbox === hoveredHitbox);
-
-      if (isHovered !== hitbox.userData.isHovered) {
-        hitbox.userData.isHovered = isHovered;
-        const { type, targets, Axis } = hitbox.userData;
-
-        if (!targets) return;
-
-        if (isHovered && hitbox.name.includes('target')) {
-          playSpatialSound(sounds.targetHover, hitbox);
-        }
-
-        targets.forEach((targetMesh) => {
-          const swingDirection = targetMesh.userData.swingDirection || 1;
-          const isCustom = targetMesh.name === "oven_2_glass_second";
-
-          // --- NEW AUDIO LOGIC ---
-          if (type === 'cabinet') {
-            if (isHovered) playSpatialSound(sounds.cabinetOpen, targetMesh);
-            else playSpatialSound(sounds.cabinetClose, targetMesh);
-          } 
-          else if (type === 'oven') {
-            if (isHovered) playSpatialSound(sounds.ovenOpen, targetMesh);
-            else playSpatialSound(sounds.ovenClose, targetMesh);
-          }
-          else if (type === 'officeChair') {
-            if (isHovered) playSpatialSound(sounds.chairSlideOff, targetMesh);
-            else playSpatialSound(sounds.chairSlideIn, targetMesh);
-          }
-          else if (isHovered) {
-            // One-shot hover sounds
-            if (type.includes('scaleUp') || hitbox.name.includes('utensil')) playSpatialSound(sounds.utensils, targetMesh);
-            else if (type === 'soap') playSpatialSound(sounds.bubbles, targetMesh);
-            else if (type === 'hangingLights') {if (targetMesh.name.includes("hanging_lights")) playSpatialSound(sounds.hangingLights, targetMesh); else playSpatialSound(sounds.highlight, targetMesh)}
-            else if (type === 'laptopScreen') playSpatialSound(sounds.laptop, targetMesh);
-            else if (hitbox.name.includes('glass') && hitbox.name.includes('raycaster')) playSpatialSound(sounds.glass, targetMesh);
-          }
-          
-          // 1. Hanging Lights (Color Animation)
-          if (type === 'hangingLights') {
-            const targetBrightness = isHovered ? 3.5 : 1.0;
-            if (targetMesh.material) {
-              runQueueAnimation(targetMesh, isHovered, null, targetBrightness, 'color', 0.4);
-            }
-          } 
-          
-          // 2. Scaling Objects (Scale + Y Rotation)
-          else if (type.includes('scaleUp') && !targetMesh.name.includes('pot')) {
-            const scaleVal = 1.2;
-            const rotVal = isHovered ? -Math.PI / 6 : 0;
-            
-            runQueueAnimation(targetMesh, isHovered, Axis, scaleVal, 'scale', 0.2);
-            if (type === "scaleUpRotate") {
-              gsap.to(targetMesh.rotation, {
-                z: targetMesh.userData.initialRot.z + rotVal,
-                duration: 0.3,
-                ease: "power2.out"
-              });
-            }
-          } 
-          
-          // 3. Standard Cabinets/Ovens/Chairs (Rotation)
-          else {
-            let targetValue = 0;
-            let duration = 0.5;
-            let animType = 'rotation';
-
-            if (type === 'cabinet' || type === 'oven') {
-              targetValue = (Math.PI / 2) * swingDirection;
-              if (isCustom) {
-                animType = 'customRotation';
-                duration = 1.0;
-              }
-            } else if (type === 'officeChair') {
-              targetValue = Math.PI / 6;
-            } else {
-              return; // Not a recognized interactive type
-            }
-
-            runQueueAnimation(targetMesh, isHovered, Axis, targetValue, animType, duration);
-          }
-        });
-      }
+      const isHovered = hitbox === hoveredHitbox;
+      handleHoverInteraction(hitbox, isHovered);
     });
 
     // 3. SOAP & BUBBLES CONTINUOUS PHYSICS
@@ -1196,118 +1034,6 @@ const scaleUpItems = [];
         }
       }
     });
-   // --- CABINET DOOR ANIMATION LOGIC ---
-    // Raycast against the invisible, stationary hitboxes instead of the moving meshes
-  //   const doorIntersects = raycaster.intersectObjects(doorHitboxes, false);
-  //   const currentHoveredPair = doorIntersects.length > 0 ? doorIntersects[0].object.userData.pairId : null;
-     
-  //   ['1', '2'].forEach(pairId => {
-  //     const isHovered = (currentHoveredPair === pairId);
-      
-  //     // Trigger animation only when the mouse enters or leaves the invisible bounding box
-  //     if (isHovered !== doorWasHovered[pairId]) {
-  //       doorWasHovered[pairId] = isHovered;
-  //       const pair = cabinetDoors[pairId];
-        
-  //       // Animate Left Panel
-  //       if (pair.left) {
-  //         gsap.to(pair.left.rotation, { 
-  //           y: isHovered ? pair.left.userData.initialRotY - (Math.PI / 2) : pair.left.userData.initialRotY, 
-  //           duration: 0.5, 
-  //           ease: "power2.out",
-  //           overwrite: true // Allows smooth direction-change if you quickly swipe your mouse
-  //         });
-  //       }
-        
-  //       // Animate Right Panel
-  //       if (pair.right) {
-  //         gsap.to(pair.right.rotation, { 
-  //           y: isHovered ? pair.right.userData.initialRotY + (Math.PI / 2) : pair.right.userData.initialRotY, 
-  //           duration: 0.5, 
-  //           ease: "power2.out",
-  //           overwrite: true
-  //         });
-  //       }
-  //     }
-  //   });
-  //   // 1. Evaluate hover state in one ultra-fast line.
-  // // If length is 0, JS instantly returns false and skips checking the name!
-  //   // --- SOAP LOGIC ---
-  //   if (soap) {
-  //     const soapIntersects = raycaster.intersectObject(soap, false);
-  //     soapIsHovered = soapIntersects.length > 0;
-
-  //     bubblesData.forEach((data) => {
-  //       const sprite = data.sprite;
-
-  //       // Spawning
-  //       if (soapIsHovered && sprite.position.y < -10) {
-  //         if (Math.random() > 0.9) { 
-  //           // Spawn bubbles using local coordinates relative to the soap's origin
-  //           sprite.position.set(
-  //             (Math.random() - 0.5) * 0.1, 
-  //             0.05 + Math.random() * 0.05, // Shifted up by 0.05 local units to spawn on top
-  //             (Math.random() - 0.5) * 0.1  
-  //           );
-
-  //           // Pop out 0.4 to 0.6 local units above the soap
-  //           data.popHeight = 0.2 + (Math.random() * 0.2);
-  //         }
-  //       }
-
-  //       // Floating physics
-  //       if (sprite.position.y > -10) {
-  //         sprite.position.y += data.speed;
-  //         sprite.position.x += Math.sin(elapsedTime * 2 + data.phase) * 0.001;
-  //         sprite.position.z += Math.cos(elapsedTime * 2 + data.phase) * 0.001;
-
-  //         // Pop logic
-  //         if (sprite.position.y > data.popHeight) {
-  //           sprite.position.y = -999;
-  //         }
-  //       }
-  //     });
-  //   }
-  //   tapIsHovered = currentIntersects.length > 0 && currentIntersects[0].object.name.includes("tap");
-
-  //   // 2. Trigger animations ONLY when the state actually changes
-  //   if (tapIsHovered !== tapWasHovered) {
-  //     tapWasHovered = tapIsHovered;
-
-  //     gsap.to(tapValve.rotation, {
-  //       x: tapIsHovered ? tapValve.userData.initialRotationX + (Math.PI / 4) : tapValve.userData.initialRotationX,
-  //       duration: 0.3,
-  //       ease: "power2.out"
-  //     });
-
-  //     gsap.killTweensOf(waterStream.scale);
-  //     gsap.killTweensOf(waterStream.position);
-
-  //   if (tapIsHovered) {
-  //       // TURN ON: Snap position back to the tap and grow downwards
-  //       waterStream.position.copy(tapBody.position);
-  //       gsap.to(waterStream.scale, {
-  //         y: waterStreamLength,
-  //         duration: 0.2,
-  //         ease: "power1.inOut"
-  //       });
-  //     } else {
-  //       // TURN OFF: Detach top and fall into the sink
-  //       gsap.to(waterStream.position, {
-  //         y: tapBody.position.y - waterStreamLength,
-  //         duration: 0.25,
-  //         ease: "power2.in" // Accelerates as it falls (like gravity)
-  //       });
-        
-  //       gsap.to(waterStream.scale, {
-  //         y: 0,
-  //         duration: 0.25,
-  //         ease: "power2.in"
-  //       });
-  //     }
-  //   }
-
-  //   // 3. Particle Physics (runs exactly as you wrote it)
     if (waterStream.scale.y > 0.089) {
       const positions = splashParticles.geometry.attributes.position.array;
       for (let i = 0; i < splashCount; i++) {
@@ -1361,12 +1087,8 @@ const scaleUpItems = [];
       camera.position.add(moveVec);
       controls.target.add(moveVec);
     }
-    // Update Howler 3D Listener to match Camera Position & Rotation
-    Howler.pos(camera.position.x, camera.position.y, camera.position.z);
-    
-    const camDir = new THREE.Vector3();
-    camera.getWorldDirection(camDir);
-    Howler.orientation(camDir.x, camDir.y, camDir.z, camera.up.x, camera.up.y, camera.up.z);
+    // Update 3D audio listener to match Camera Position & Rotation
+    updateListener(camera);
     updateCameraConstraints();
     controls.update(); // Required for damping
     PostProcessing.render();
