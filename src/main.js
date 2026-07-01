@@ -17,7 +17,7 @@ let btnUp;
 let btnDown;
 let hud;
 let hudText;
-let sizes = { width: window.innerWidth, height: window.innerHeight };
+const sizes = { width: window.innerWidth, height: window.innerHeight };
 let audioBtn;
 let loadingText;
 let segmentsContainer;
@@ -351,7 +351,7 @@ const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
 const moveSpeed = 3.0; // Units per second
 let lastTap = 0;
 let touchMode = 'rotate';
-let touchStart = new THREE.Vector2();
+const touchStart = new THREE.Vector2();
 let touchStartDistance = 0;
 let touchActive = false;
 
