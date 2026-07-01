@@ -98,7 +98,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               });
               
               if (targets.length === 0) {
-                 console.warn("No doors found for base:", baseName);
                  targets.push(child);
               }
             } 
@@ -110,7 +109,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               }
               
               // Find the object: ensure we target the highest parent if available
-              console.log(targetName);
               targets.push(targetObj);
             }
             else if (child.name.includes('tap_valve')) {
@@ -138,7 +136,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               targets.push(targetObj);
             } else if (child.name.includes('laptop_screen')) {
               type = "laptopScreen";
-              console.log(child);
               targets.push(targetObj);
             }
             
@@ -151,7 +148,26 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               child.userData.initialPos = child.position.clone();
               Axis = 'z';
               targets.push(child);
-            } else if (child.name.includes('scale_up') && !child.name.includes('pot')) {
+            }
+            else if (nameLower.includes('linked_in') && nameLower.includes('target') || nameLower.includes('youtube') && nameLower.includes('target') || nameLower.includes('github') && nameLower.includes('target') || nameLower.includes('certificate') && !nameLower.includes('certificate_1') && nameLower.includes('target') || nameLower.includes('chess_board') && nameLower.includes('target')) {
+              type = 'socialLink';
+              
+              if (nameLower.includes('linked_in')) {
+                child.userData.url = 'https://www.linkedin.com/in/ritesh-mishra-dev-art/'; 
+              } else if (nameLower.includes('youtube')) {
+                child.userData.url = 'https://www.youtube.com/@moisturizedpotato179';     
+              } else if (nameLower.includes('github')) {
+                child.userData.url = 'https://github.com/moisturizedpotato';          
+              } else if (nameLower.includes('certificate') && !nameLower.includes('certificate_1')) {
+                child.userData.url = 'https://www.credly.com/users/ritesh-mishra.69a4de8d';          
+              } else if (nameLower.includes('chess_board')) {
+                child.userData.url = 'https://www.chess.com/member/moisturized_potato';
+              }
+
+              // Push the target object so the interaction script knows what mesh to click/animate
+              targets.push(targetObj);
+            }
+             else if (child.name.includes('scale_up') && !child.name.includes('pot')) {
               type = "scaleUp";
               if (child.name.includes('slight_rotate')) {
                 type = type + "Rotate";
@@ -261,7 +277,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
             child.scale.set(0.07, 0.075, 0.075);
             return;
           } else if (child.name.includes('laptop_screen') && !child.name.includes('hide')) {
-            console.log(child);
             child.material = new THREE.MeshBasicMaterial({
               map: laptopScreenTexture,
               side: THREE.FrontSide 
@@ -277,7 +292,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               return;
           }
           else if (child.name.toLowerCase().includes('glass')) {
-            if (child.name.includes("ceiling_glass_fourth_floor_2")) {console.log(child);}
               child.material = new THREE.MeshPhysicalMaterial({
               map: matchedKey ? loadedTextures[matchedKey] : null, // Mixes baked texture with glass
               color: 0x86562b,
@@ -338,7 +352,7 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               const square = match[0];
             child.userData.color = (square[1] === '1' || square[1] === '2') ? 'w':'b';
             chessPieces[square] = child;
-            }else {console.warn("Found a chess piece but couldn't find its square in the name:", child.name);}
+            }
           }
 
 
@@ -350,7 +364,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
           }
 
           if (child.name.includes("trees_double")){
-            console.log(child);
             if (child.material) child.material.side = THREE.DoubleSide;
           }
             // Ensure crisp rendering

@@ -14,6 +14,7 @@ import { createAnimationQueue } from './animationQueue.js';
 
 let canvas;
 let btnUp;
+let whiteOverlay;
 let btnDown;
 let hud;
 let hudText;
@@ -40,6 +41,7 @@ let darkBackground;
 let darkenNonBloomed;
 let restoreMaterial;
 let resizePostProcessing;
+let backBtn;
 
 let sounds;
 let playSpatialSound;
@@ -142,6 +144,8 @@ function bindDomElements() {
   segmentsContainer = document.getElementById('loading-bar-segments');
   enterButton = document.getElementById('enter-button');
   loadingScreen = document.getElementById('loading-screen');
+  backBtn = document.getElementById('back-button');
+  whiteOverlay = document.getElementById('white-transition-overlay');
 }
 
 loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
@@ -209,6 +213,7 @@ const gltfLoader = new GLTFLoader(loadingManager);
 gltfLoader.setDRACOLoader(dracoLoader);
 
 let shiftPressed = false;
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
 let windowKeyDownHandler;
 let windowKeyUpHandler;
@@ -217,6 +222,7 @@ let windowTouchMoveHandler;
 let windowTouchEndHandler;
 let windowResizeHandler;
 let btnUpClickHandler;
+let backBtnClickHandler;
 let btnDownClickHandler;
 let audioBtnClickHandler;
 let enterButtonClickHandler;
@@ -243,6 +249,72 @@ function bindUiEventHandlers() {
     };
     btnDown.addEventListener('click', btnDownClickHandler);
   }
+  if (backBtn) {
+        backBtnClickHandler = (event) => {
+      event.preventDefault(); 
+      
+      // Play your UI click sound
+if (sounds.uiClick) sounds.uiClick.play();
+      if (sounds.whoosh) sounds.whoosh.play();
+      
+      // 3. Lock camera controls immediately so the user can't interrupt the animation
+      controls.enabled = false;
+
+      // 4. Calculate the original starting positions (accounting for mobile)
+      const isMobile = window.innerWidth < 768;
+      const mobileOffset = isMobile ? 1.5 : 1.0;
+      
+      const startCameraPos = { 
+        x: 5.811 * mobileOffset, 
+        y: 2.493, 
+        z: -3.156 * mobileOffset 
+      };
+      const startLookAt = { 
+        x: 2.554647, 
+        y: 0.0027, 
+        z: 0.313789 
+      };
+
+      // 5. Animate the camera flying backwards
+      gsap.to(camera.position, {
+        x: startCameraPos.x,
+        y: startCameraPos.y,
+        z: startCameraPos.z,
+        duration: 2.0, // 2 seconds for a smooth pull-out
+        ease: "power3.inOut"
+      });
+
+      // 6. Animate the focus target back to center (in case they panned away)
+      gsap.to(controls.target, {
+        x: startLookAt.x,
+        y: startLookAt.y,
+        z: startLookAt.z,
+        duration: 2.0,
+        ease: "power3.inOut",
+        onUpdate: () => controls.update()
+      });
+
+      // 7. Sync the White Fade with the camera animation
+      if (whiteOverlay) {
+        whiteOverlay.style.display = 'block';
+        whiteOverlay.style.pointerEvents = 'auto'; // Block all screen clicks
+        
+        gsap.to(whiteOverlay, {
+          opacity: 1,
+          duration: 2.0, // Matches the 2.0s camera fly-out perfectly
+          ease: "power2.inOut",
+          onComplete: () => {
+            // Redirect only when the screen is pure white and the camera has stopped
+            window.location.href = backBtn.href;
+          }
+        });
+      } else {
+        // Safe fallback just in case the HTML element is missing
+        setTimeout(() => { window.location.href = backBtn.href; }, 2000);
+      }
+     }
+    backBtn.addEventListener('click', backBtnClickHandler);
+  }
 
   if (audioBtn) {
     audioBtnClickHandler = () => {
@@ -251,13 +323,12 @@ function bindUiEventHandlers() {
       audioBtn.innerText = bgmPlaying ? 'TURN: OFF' : 'TURN: ON';
     };
     audioBtn.addEventListener('click', audioBtnClickHandler);
-  } else {
-    console.warn('Could not find the #audio-toggle button in the HTML!');
   }
 }
 
 function unbindUiEventHandlers() {
   if (btnUp && btnUpClickHandler) btnUp.removeEventListener('click', btnUpClickHandler);
+  if (backBtn && backBtnClickHandler) backBtn.removeEventListener('click', backBtnClickHandler);
   if (btnDown && btnDownClickHandler) btnDown.removeEventListener('click', btnDownClickHandler);
   if (audioBtn && audioBtnClickHandler) audioBtn.removeEventListener('click', audioBtnClickHandler);
   if (enterButton && enterButtonClickHandler) enterButton.removeEventListener('click', enterButtonClickHandler);
@@ -294,7 +365,8 @@ function updateCameraConstraints() {
 
   // 2. Movement/Pan Lock
   // Only allow panning if SHIFT is pressed
-  controls.enablePan = shiftPressed;
+  const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  controls.enablePan = shiftPressed || isTouchDevice;
 
   // 3. Clamp the Pan boundaries so user can't wander off into the void
   controls.target.clamp(CAMERA_BOUNDS.minPan, CAMERA_BOUNDS.maxPan);
@@ -323,12 +395,6 @@ function adjustHudForMobile() {
 function handleRaycasterInteraction() {
   if (intersects.length === 0) return;
 
-  const object = intersects[0].object;
-  if (!object.name.includes('target')) return;
-
-  const targetMesh = object.userData.targets?.[0];
-  if (!targetMesh) return;
-
   const interactionDefinitions = {
     frontDoor: { open: sounds.doorOpen, close: sounds.doorClose, targetValue: Math.PI / 2, animType: 'rotation', duration: 1.0 },
     drawer1: { open: sounds.drawerOpen, close: sounds.drawerClose, targetValue: -0.12, animType: 'translation', duration: 1.0 },
@@ -338,10 +404,20 @@ function handleRaycasterInteraction() {
     wardrobe: { open: sounds.cabinetOpen, close: sounds.cabinetClose, targetValue: Math.PI / 3, animType: 'rotation', duration: 0.5 },
   };
 
+  const object = intersects[0].object;
   const currentType = object.userData.type;
+  if (!object.name.includes('target')) return;
+
+  const targetMesh = object.userData.targets?.[0];
+  if (!targetMesh) return;
+
+  if (currentType === 'socialLink') {
+    if (sounds.uiClick) playSpatialSound(sounds.uiClick, targetMesh);
+    window.open(object.userData.url, '_blank'); // Opens in a new tab
+    return; // Stop the rest of the function
+  }
   const definition = interactionDefinitions[currentType];
   if (!definition) return;
-
   object.userData.wantsOpen = !object.userData.wantsOpen;
   playSpatialSound(object.userData.wantsOpen ? definition.open : definition.close, targetMesh);
   runQueueAnimation(targetMesh, object.userData.wantsOpen, object.userData.Axis, definition.targetValue, definition.animType, definition.duration);
@@ -483,14 +559,83 @@ function handleTapHoverState(valveHitbox, bodyHitbox, isHovered) {
   setWaterFlow(isHovered, targetPos);
 }
 
+// --- AUTO-FIT HUD TEXT FUNCTION ---
+function fitTextToBox(container, textElement) {
+  const maxFontSize = 12; // Your default desktop size
+  const minFontSize = 10; // The absolute smallest it should get
+
+  // 1. Reset to max size before calculating
+  textElement.style.fontSize = maxFontSize + 'px';
+
+  // 2. Measure and shrink loop
+  let currentSize = maxFontSize;
+  
+  // scrollWidth is the actual width of the text. clientWidth is the width of the box.
+  while (textElement.scrollWidth > container.clientWidth && currentSize > minFontSize) {
+    currentSize--;
+    textElement.style.fontSize = currentSize + 'px';
+  }
+}
+
 function handleHoverInteraction(hitbox, isHovered) {
   if (isHovered === hitbox.userData.isHovered) return;
   hitbox.userData.isHovered = isHovered;
+  let info = '';
   const { type, targets, Axis } = hitbox.userData;
   if (!targets) return;
 
-  if (isHovered && hitbox.name.includes('target') && !hitbox.name.includes('drawer')) {
-    playSpatialSound(sounds.targetHover, hitbox);
+  if (isHovered) {
+    if (hitbox.name.includes('target') && !hitbox.name.includes('drawer')) {
+      playSpatialSound(sounds.targetHover, hitbox);
+    }
+    if (hitbox.name.includes('youtube')) {
+      info = "Check out my youtube from here! Although there really isn't much to see there...";
+    }
+    if (hitbox.name.includes('github')) {
+      info = "My github repos.";
+    }
+    if (hitbox.name.includes('linked_in')) {
+      info = "My linked in profile if we wanna talk business.";
+    }
+    if (hitbox.name.includes('certificate_1')) {
+      info = "Foundational level: Complete diploma: in progress";
+    }
+    if (hitbox.name.includes('chess_board')) {
+      console.log(hitbox.name);
+      info = "One of the few decent games i played. Click for profile.";
+    }
+    if (hitbox.name.includes('monitor_screen')) {
+      info = "Go back to main page (under development).";
+    }
+    if (hitbox.name.includes('laptop_screen')) {
+      info = "Check out my programing/3D modeling skillsets!";
+    }
+    if (hitbox.name.includes('Pot')) {
+      info = "See what I am cooking next!";
+    }
+    if (hitbox.name.includes('wardrobe')) {
+      info = "There really isn't anything in there.";
+    }
+    if (hitbox.name.includes('certificate_2')) {
+      info = "Click these to view my cerdly badges and certificates.";
+    }
+    if (hitbox.name.includes('certificate_4')) {
+      info = "Oracle associate and professional cloud engineer certificates.";
+    }
+    if (hitbox.name.includes('certificate_3')) {
+      info = "secured second place at IIT Roorkee's Nanonavigator 2026"
+    }
+    if (hitbox.name.includes('drawer')) {
+      info = "A whole lot of nothing.";
+    }
+    if (hitbox.name.includes('door_Third')) {info="It does what it's supoosed to.";}
+    if (hitbox.name.includes('poster_1')) {info="Minecraft, one of the jolliest memories of childhood.";}
+    if (hitbox.name.includes('poster_2')) {info="Gotta appreciate the graphics of the game.";}
+    if (hitbox.name.includes('link_figurine')) {info="The hero of time.";}
+    if (hitbox.name.includes('mario_figurine')) {info="It's a me, Mario!";}
+    hudText.innerText = info;
+    hud.style.display = 'flex';
+    fitTextToBox(hud, hudText);
   }
 
   targets.forEach((targetMesh) => {
@@ -930,13 +1075,10 @@ async function init() {
     // Only show HUD if we hit an object with a 'target' name
     const hoveredHitbox = intersects.length > 0 ? intersects[0].object : null;
     if (hoveredHitbox?.name.includes('target')) {
-      hud.style.display = 'flex';
       
       // Position the HUD near the cursor (with a small offset)
       hud.style.left = ((pointer.x + 1) * sizes.width) / 2 + 20 + 'px';
       hud.style.top = ((-pointer.y + 1) * sizes.height) / 2 + 'px';
-      const info = hoveredHitbox.name.replace(/_/g, ' ').replace('target', '');
-      hudText.innerText = info;
     } else {
       hud.style.display = 'none';
     }
