@@ -186,7 +186,7 @@ function setupRendererAndCamera() {
   controls.enableZoom = true;
   controls.enablePan = false;
   controls.touches.ONE = THREE.TOUCH.ROTATE;
-  controls.touches.TWO = THREE.TOUCH.DOLLY;
+  controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
   controls.target.set(2.554647, 0.0027, 0.313789);
 
   const isMobile = window.innerWidth < 768;
