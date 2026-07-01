@@ -348,7 +348,7 @@ class OrbitControls extends Controls {
     } else {
       this.target.add(this._panOffset);
     }
-    this.target.clamp(minPan, maxPan);
+    //this.target.clamp(minPan, maxPan);
 
     // Limit the target distance from the cursor to create a sphere around the center of interest
     this.target.sub(this.cursor);

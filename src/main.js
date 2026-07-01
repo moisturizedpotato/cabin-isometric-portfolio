@@ -96,19 +96,18 @@ const transparentOpacity = 0.2;
 let tapWasHovered = false;
 
 const CAMERA_BOUNDS = {
-  minPan: new THREE.Vector3(
-2.123708182501076,
+  minPan: new THREE.Vector3(2.123708182501076,
 0.1,
-0.23236511252797676), // Minimum X, Y, Z
+0.23236511252797676), // Wide enough to cover the whole cabin
   maxPan: new THREE.Vector3(3.3264561167933016,
 1,
-0.2592356070361481),    // Maximum X, Y, Z
-  minZoom: 0.5,                          // Closest the camera can get
-  maxZoom: 4,
+0.2592356070361481),   
+  minZoom: 0.5,                          
+  maxZoom: 5,                             // Allow zooming further out
   minPolarAngle: Math.PI / 32, // 45 degrees (don't look too far down)
   maxPolarAngle: Math.PI / 2 - 0.1, // 90 degrees (don't look past the horizon/floor)
   minAzimuthAngle: Math.PI / 2 + Math.PI / 4, // -45 degrees (left limit)
-  maxAzimuthAngle: -Math.PI / 2                         // Furthest the camera can zoom out
+  maxAzimuthAngle: -Math.PI / 2                 
 };
 
 // --- NEW: WATER & SPLASH SETUP ---
