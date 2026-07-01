@@ -148,6 +148,7 @@ body {
     border-radius: 3px;
   }
     #hud-text {
+      padding-left: 120px;
     color: rgba(255, 255, 255, 0.844);
     font-size: 6px;
   }
@@ -281,4 +282,47 @@ body {
   opacity: 0;
   display: none; 
   pointer-events: none; /* Ensures it doesn't block the screen while invisible */
+}
+
+/* Add this to style.scss */
+#intro-text-box {
+  position: absolute;
+  top: 80%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  
+  /* Matches the dark, slightly transparent background */
+  background: rgba(25, 25, 25, 0.85); 
+  
+  /* The subtle grey/white border */
+  border: 1px solid rgba(255, 255, 255, 0.25); 
+  border-radius: 12px; 
+  
+  /* Text styling */
+  color: #ffffff;
+  font-family: sans-serif;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+  padding: 14px 28px;
+  
+  /* Layout & Interaction */
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  z-index: 1000;
+  
+  /* Start hidden for the GSAP fade-in */
+  display: none; 
+  opacity: 0; 
+  
+  /* Optional: Adds a slight blur to whatever is behind the box */
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* Adds a subtle interaction feedback when they hover to "knock" */
+#intro-text-box:hover {
+  background: rgba(40, 40, 40, 0.95);
+  border-color: rgba(255, 255, 255, 0.5);
 }

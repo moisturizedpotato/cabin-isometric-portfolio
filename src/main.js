@@ -648,7 +648,7 @@ function handleHoverInteraction(hitbox, isHovered) {
       return;
     }
 
-    if (type.includes('scaleUp') && !targetMesh.name.includes('Pot')) {
+    if ((type.includes('scaleUp') || type.includes('socialLink')) && !targetMesh.name.includes('Pot') && !targetMesh.name.includes('chess_board')) {
       runQueueAnimation(targetMesh, isHovered, Axis, 1.2, 'scale', 0.2);
       if (type === 'scaleUpRotate') {
         gsap.to(targetMesh.rotation, {
@@ -914,7 +914,7 @@ async function init() {
   controls.enabled = false;
   const scaleUpItems = [];
   interactables.forEach(hitbox => {
-    if (hitbox.userData.type && hitbox.userData.type.toLowerCase().includes('scaleup') && !hitbox.name.includes('Pot')) {
+    if (hitbox.userData.type && (hitbox.userData.type.toLowerCase().includes('scaleup') || hitbox.userData.type.toLowerCase().includes('sociallink')) && !hitbox.name.includes('Pot') && !hitbox.name.includes('chess_board')) {
       if (hitbox.userData.targets) {
         hitbox.userData.targets.forEach(mesh => {
           if (!mesh.userData.initialScale) mesh.userData.initialScale = mesh.scale.clone();
@@ -952,59 +952,135 @@ async function init() {
     });
   }
 
-  // --- 3. REVEAL ENTER BUTTON ---
-  // The models are loaded, hide the progress bar and show the button
-  loadingText.style.display = 'none';
-  document.getElementById('loading-bar-container').style.display = 'none';
-  enterButton.style.display = 'block';
+// --- 3. REVEAL ENTER BUTTON ---
+  const loadingContainer = document.getElementById('loading-bar-container');
+  const introBox = document.getElementById('intro-text-box'); 
+  
+  // Smoothly fade out the loading text and segments
+  gsap.to([loadingText, loadingContainer], {
+    opacity: 0,
+    duration: 0.8,
+    ease: "power2.inOut",
+    onComplete: () => {
+      loadingText.style.display = 'none';
+      if (loadingContainer) loadingContainer.style.display = 'none';
+      
+      // Reveal the original Enter Button
+      if (enterButton) {
+        enterButton.style.display = 'block';
+        gsap.to(enterButton, { opacity: 1, duration: 0.5 });
+      }
+    }
+  });
 
   let hasStarted = false;
 
   // --- 4. THE GRAND ENTRANCE EVENT ---
-  enterButton.addEventListener('click', () => {
+// --- 4. THE GRAND ENTRANCE EVENT ---
+  if (enterButton) {
+    enterButton.addEventListener('click', () => {
 
-    if (hasStarted) return; 
-    hasStarted = true;
-    
-    // Play Audio (Browser is now unlocked!)
-    sounds.uiClick.play();
-    gsap.delayedCall(0.8, () => {
-      sounds.whoosh.play();
-    });
-    sounds.bgm.play();
-    bgmPlaying = true;
-    document.getElementById('audio-toggle').innerText = 'TURN: OFF'; // Sync your UI toggle
+      if (hasStarted) return; 
+      hasStarted = true;
 
-    // Fade out the Black Screen
-    gsap.to(loadingScreen, {
-      opacity: 0,
-      duration: 2.0, // Fade duration
-      ease: "power2.inOut",
-      onComplete: () => {
-        loadingScreen.style.display = 'none';
+      // 1. Instantly remove enter button
+      gsap.to(enterButton, { 
+        opacity: 0, 
+        duration: 0.5, 
+        onComplete: () => enterButton.style.display = 'none' 
+      });
+
+      // 2. Play Audio 
+      if (sounds.uiClick) sounds.uiClick.play();
+      gsap.delayedCall(0.8, () => {
+        if (sounds.whoosh) sounds.whoosh.play();
+      });
+      if (sounds.bgm) {
+        sounds.bgm.play();
+        bgmPlaying = true;
+      }
+      const toggleBtn = document.getElementById('audio-toggle');
+      if (toggleBtn) toggleBtn.innerText = 'TURN: OFF';
+
+      // 3. Fade out Black Screen (Takes 2.0s)
+      gsap.to(loadingScreen, {
+        opacity: 0,
+        duration: 2.0, 
+        ease: "power2.inOut",
+        onComplete: () => {
+          if (loadingScreen) loadingScreen.style.display = 'none';
+        }
+      });
+
+      // 4. Start Camera Fly-in (Takes 3.5s)
+      const finalCameraPos = { x: 2.7398029971484745, y: 0.8794004125894785, z: -2.9957373670464307 };
+      const finalLookAt = { x: 2.5546474760257314, y: 0.002700000017881676, z: 0.3137892400795657 };
+
+      gsap.to(camera.position, {
+        x: finalCameraPos.x, y: finalCameraPos.y, z: finalCameraPos.z,
+        duration: 3.5, ease: "power3.inOut"
+      });
+
+      gsap.to(controls.target, {
+        x: finalLookAt.x, y: finalLookAt.y, z: finalLookAt.z,
+        duration: 3.5, ease: "power3.inOut",
+        onUpdate: () => controls.update(),
+        onComplete: () => {
+          controls.enabled = true; // Unlock camera ONLY when it stops
+        }
+      });
+
+      // 5. Trigger Pop-ins (Starts independently at 2.5s)
+      playPopInSequence(1.5, 0.1); 
+
+      // 6. Trigger Intro Box (Starts independently at 4.5s)
+// 6. Trigger Intro Box Sequence (Starts independently at 4.5s)
+      if (introBox) {
+        gsap.delayedCall(4.5, () => {
+          introBox.style.display = 'block'; 
+          
+          // Set the initial text before the animation starts
+          introBox.innerText = "hold shift + left hold to move camera"; 
+          
+          // Create a timeline to chain the animations perfectly
+          const textTimeline = gsap.timeline();
+          
+          textTimeline
+            // 1. Fade IN first message
+            .to(introBox, { opacity: 1, duration: 1.2, ease: "power2.out" })
+            
+            // 2. Fade OUT first message (the "+=3.0" makes it wait 3 seconds before fading out)
+            .to(introBox, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, "+=3.0")
+            
+            // 3. Swap the text instantly while it is completely invisible
+            .call(() => {
+              introBox.innerText = "use WASD + QE to move camera"; 
+            })
+            // 1. Fade IN first message
+            .to(introBox, { opacity: 1, duration: 1.2, ease: "power2.out" })
+            
+            // 2. Fade OUT first message (the "+=3.0" makes it wait 3 seconds before fading out)
+            .to(introBox, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, "+=3.0")
+            
+            // 3. Swap the text instantly while it is completely invisible
+            .call(() => {
+              introBox.innerText = "or use two fingers to move camera on mobile"; 
+            })
+            
+            // 4. Fade IN second message
+            .to(introBox, { opacity: 1, duration: 1.2, ease: "power2.out" })
+            
+            // 5. Fade OUT second message (wait another 3 seconds)
+            .to(introBox, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, "+=3.0")
+            
+            // 6. Hide it completely from the DOM when the entire sequence is finished
+            .call(() => {
+              introBox.style.display = 'none';
+            });
+        });
       }
     });
-
-    // Animate Camera Fly-in
-    const finalCameraPos = { x: 2.7398029971484745, y: 0.8794004125894785, z: -2.9957373670464307 };
-    const finalLookAt = { x: 2.5546474760257314, y: 0.002700000017881676, z: 0.3137892400795657 };
-
-    gsap.to(camera.position, {
-      x: finalCameraPos.x, y: finalCameraPos.y, z: finalCameraPos.z,
-      duration: 3.5, ease: "power3.inOut"
-    });
-
-    gsap.to(controls.target, {
-      x: finalLookAt.x, y: finalLookAt.y, z: finalLookAt.z,
-      duration: 3.5, ease: "power3.inOut",
-      onUpdate: () => controls.update(),
-      onComplete: () => controls.enabled = true // Give control back to the user
-    });
-
-    // Trigger the pop-in items! (0.5s initial delay, 0.1s stagger)
-    playPopInSequence(1.3, 0.1); 
-  });
-  // ------------------------------
+  }
     
   // 3. The Animation Loop
   const render = () => {
