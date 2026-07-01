@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>my-vite-app</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="loading-screen">
+    <div id="loading-content">
+      
+      <div id="loading-text">INITIALIZING... 0%</div>
+      <div id="loading-bar-container">
+        <div id="loading-bar-segments"></div>
+      </div>
+      
+      <button id="enter-button" style="display: none;">ENTER CABIN</button>
+      
+    </div>
+  </div>
+    <button id="audio-toggle">TURN: OFF</button>
+    <div id="floor-controls">
+      <button id="btn-floor-up" class="floor-btn">
+        <img src="/images/upArrow.png" alt="Up" />
+      </button>
+      <button id="btn-floor-down" class="floor-btn">
+        <img src="/images/downArrow.png" alt="Down" />
+      </button>
+    </div>
+    <div class="experience">
+      <canvas id="experience-canvas" class="experience-canvas"></canvas>
+    </div>
+    <div id="hover-hud">
+      <div id="hud-text">Test</div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

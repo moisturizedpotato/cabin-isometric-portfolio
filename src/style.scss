@@ -1,0 +1,234 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+#experience {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+
+  #experience-canvas {
+    touch-action: none;
+    width: 100%;
+    height: 100%;
+    display: flex;
+  }
+}
+
+/* Floor Controls Overlay */
+#floor-controls {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  z-index: 100; /* Ensures it sits on top of the Three.js canvas */
+  pointer-events: none; /* Lets you click through the empty space */
+}
+
+.floor-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 10px;
+  cursor: pointer;
+  pointer-events: auto; /* Re-enables clicking exactly on the buttons */
+  transition: all 0.2s ease;
+  transform: scale(1.6);
+}
+
+.floor-btn:hover {
+  transform: scale(1.75);
+  filter: drop-shadow(0px 0px 8px rgba(255, 255, 255, 0.6));
+}
+
+.floor-btn img {
+  width: 32px;
+  height: 32px;
+  display: block;
+}
+
+/* style.scss */
+
+#hover-hud {
+  position: fixed; 
+  top: 0;
+  left: 0;
+  z-index: 9999; 
+  pointer-events: none; 
+  
+  /* Start hidden */
+  display: none; 
+  
+  /* Box Dimensions */
+  width: 250px;
+  height: 75px;
+  
+  /* Image Alignment */
+  background-image: url('/images/dialog_box.png');
+  background-size: 100% 100%; /* Forces the image to stretch to exactly 300x150 */
+  background-repeat: no-repeat;
+
+  /* FLEXBOX LOGIC: This centers the text vertically inside the box */
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  
+  /* THE SAFE ZONE: Tweak these 4 numbers until the text sits exactly inside the frame */
+  /* Top, Right, Bottom, Left (Left is largest to push past the tail) */
+  padding: 20px 20px 20px 125px; 
+  box-sizing: border-box;
+  
+  /* Hard stop: prevents text from physically rendering outside the div */
+  overflow: hidden; 
+  
+  /* Typography */
+  color: #202020;
+  font-family: 'Courier New', Courier, monospace;
+  #hud-text {
+    color: rgba(255, 255, 255, 0.844);
+    line-height: 1.2;
+    font-size: 12px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  #hover-hud {
+    padding: 6px 12px;      /* Smaller padding */
+    font-size: 12px;        /* Force smaller font for mobile */
+    border-radius: 3px;
+  }
+    #hud-text {
+    color: rgba(255, 255, 255, 0.844);
+    line-height: 1.2;
+    font-size: 6px;
+  }
+}
+
+#audio-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: rgba(40, 40, 40, 0.8);
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  padding: 10px 20px;
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#audio-toggle:hover {
+  background: #d8d8d8;
+  color: #000;
+}
+#loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #ffffff; /* Deep black background */
+  z-index: 99999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #000000;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+#loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+#loading-text {
+  font-size: 16px;
+  letter-spacing: 4px;
+  font-weight: bold;
+}
+
+#loading-bar-container {
+  border: 2px solid #000000;
+  padding: 4px;
+  width: 320px;
+  height: 30px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+#loading-bar-segments {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+}
+
+.segment {
+  background-color: #000000;
+  height: 100%;
+  width: 20px;
+}
+
+#enter-button {
+  background: transparent;
+  border: 2px solid #000000;
+  color: #000000;
+  padding: 15px 40px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.3s, color 0.3s;
+}
+
+#enter-button:hover {
+  background: #000000;
+  color: #ffffff;
+}

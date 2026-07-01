@@ -1,0 +1,16 @@
+[Event "Live Chess"]
+[Site "Chess.com"]
+[Date "2026.05.19"]
+[Round "-"]
+[White "Moisturized_potato"]
+[Black "Oyotsky25"]
+[Result "1-0"]
+[WhiteElo "905"]
+[BlackElo "884"]
+[TimeControl "300"]
+[EndTime "8:56:33 GMT+0000"]
+[Termination "Moisturized_potato won by checkmate"]
+
+1. d4 Nf6 2. c4 d5 3. Nc3 Bf5 4. Qa4+ Bd7 5. Qb3 dxc4 6. Qxc4 Be6 7. Qb5+ Bd7 8.
+Qd3 a6 9. e4 e6 10. Nf3 Bb4 11. Qc2 O-O 12. Bg5 h6 13. Bh4 Bxc3+ 14. bxc3 g5 15.
+Nxg5 hxg5 16. Bxg5 Kg7 17. e5 Kg8 18. Bxf6 Qe8 19. Bd3 Bc6 20. Bh7# 1-0
