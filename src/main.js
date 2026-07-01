@@ -367,16 +367,20 @@ function setupGlobalEventListeners() {
   window.addEventListener('keyup', windowKeyUpHandler);
 
   windowTouchStartHandler = (event) => {
-    if (event.touches.length === 1) {
-      raycasterManager.updatePointerFromEvent(event);
-      event.preventDefault();
+    if (event.target === canvas || event.target.closest('#experience-canvas')) {
+      if (event.touches.length === 1) {
+        raycasterManager.updatePointerFromEvent(event);
+        event.preventDefault();
+      }
     }
   };
   window.addEventListener('touchstart', windowTouchStartHandler, { passive: false });
 
   windowTouchEndHandler = (event) => {
-    handleRaycasterInteraction();
-    event.preventDefault();
+    if (event.target === canvas || event.target.closest('#experience-canvas')) {
+      handleRaycasterInteraction();
+      event.preventDefault();
+    }
   };
   window.addEventListener('touchend', windowTouchEndHandler, { passive: false });
 
