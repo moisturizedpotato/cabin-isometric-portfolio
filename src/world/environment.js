@@ -23,7 +23,7 @@ export function loadEnvironment(scene, manager) {
         scene.background = texture;
         scene.backgroundIntensity = 1;
         scene.backgroundRotation.y = Math.PI / 32;
-        scene.backgroundRotation.z = Math.PI / 16 + Math.PI / 32;
+        scene.backgroundRotation.z = 0;
       },
       undefined,
       (error) => {

@@ -537,7 +537,7 @@ function handleHoverInteraction(hitbox, isHovered) {
   const { type, targets, Axis } = hitbox.userData;
   if (!targets) return;
 
-  if (isHovered && hitbox.name.includes('target')) {
+  if (isHovered && hitbox.name.includes('target') && !hitbox.name.includes('drawer')) {
     playSpatialSound(sounds.targetHover, hitbox);
   }
 
@@ -551,7 +551,7 @@ function handleHoverInteraction(hitbox, isHovered) {
       return;
     }
 
-    if (type.includes('scaleUp') && !targetMesh.name.includes('pot')) {
+    if (type.includes('scaleUp') && !targetMesh.name.includes('Pot')) {
       runQueueAnimation(targetMesh, isHovered, Axis, 1.2, 'scale', 0.2);
       if (type === 'scaleUpRotate') {
         gsap.to(targetMesh.rotation, {
@@ -817,7 +817,7 @@ async function init() {
   controls.enabled = false;
   const scaleUpItems = [];
   interactables.forEach(hitbox => {
-    if (hitbox.userData.type && hitbox.userData.type.toLowerCase().includes('scaleup')) {
+    if (hitbox.userData.type && hitbox.userData.type.toLowerCase().includes('scaleup') && !hitbox.name.includes('Pot')) {
       if (hitbox.userData.targets) {
         hitbox.userData.targets.forEach(mesh => {
           if (!mesh.userData.initialScale) mesh.userData.initialScale = mesh.scale.clone();
