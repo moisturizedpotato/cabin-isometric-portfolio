@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from './utils/OrbitControls.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createInputHandler } from './systems/InputHandler.js';
@@ -195,6 +195,7 @@ function setupRendererAndCamera() {
   const camZ = -3.156;
   const mobileOffset = isMobile ? 1.5 : 1.0;
   camera.position.set(camX * mobileOffset, camY, camZ * mobileOffset);
+  controls.update();
 }
 
 function setupPostProcessing() {
@@ -349,17 +350,6 @@ function handleRaycasterInteraction() {
 
 const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
 const moveSpeed = 3.0; // Units per second
-let lastTap = 0;
-let touchMode = 'rotate';
-const touchStart = new THREE.Vector2();
-let touchStartDistance = 0;
-let touchActive = false;
-
-function getTouchDistance(touch1, touch2) {
-  const dx = touch2.clientX - touch1.clientX;
-  const dy = touch2.clientY - touch1.clientY;
-  return Math.sqrt(dx * dx + dy * dy);
-}
 
 function setupGlobalEventListeners() {
   windowKeyDownHandler = (event) => {
@@ -377,59 +367,18 @@ function setupGlobalEventListeners() {
   window.addEventListener('keyup', windowKeyUpHandler);
 
   windowTouchStartHandler = (event) => {
-    const currentTime = Date.now();
-    const tapLength = currentTime - lastTap;
-
-    if (event.touches.length === 2) {
-      touchMode = 'zoom';
-      touchActive = true;
-      controls.touches.TWO = THREE.TOUCH.DOLLY;
-      touchStartDistance = getTouchDistance(event.touches[0], event.touches[1]);
+    if (event.touches.length === 1) {
+      raycasterManager.updatePointerFromEvent(event);
       event.preventDefault();
-    } else if (event.touches.length === 1) {
-      if (tapLength > 0 && tapLength < 250) {
-        touchMode = 'pan';
-        controls.touches.ONE = THREE.TOUCH.PAN;
-        controls.enablePan = true;
-        event.preventDefault();
-      } else {
-        touchMode = 'rotate';
-        controls.touches.ONE = THREE.TOUCH.ROTATE;
-        controls.enablePan = false;
-      }
-      touchActive = true;
-      touchStart.set(event.touches[0].clientX, event.touches[0].clientY);
     }
-
-    lastTap = currentTime;
   };
   window.addEventListener('touchstart', windowTouchStartHandler, { passive: false });
 
-  windowTouchMoveHandler = (event) => {
-    if (!touchActive) return;
-
-    if (touchMode === 'pan') {
-      event.preventDefault();
-      // OrbitControls will handle one-finger pan while ONE is set to TOUCH.PAN.
-    }
-
-    if (touchMode === 'zoom' && event.touches.length === 2) {
-      event.preventDefault();
-      const nextDistance = getTouchDistance(event.touches[0], event.touches[1]);
-      const delta = nextDistance - touchStartDistance;
-      touchStartDistance = nextDistance;
-      // Let OrbitControls handle pinch zoom if touches.TWO is set to DOLLY.
-    }
+  windowTouchEndHandler = (event) => {
+    handleRaycasterInteraction();
+    event.preventDefault();
   };
-  window.addEventListener('touchmove', windowTouchMoveHandler, { passive: false });
-
-  windowTouchEndHandler = () => {
-    touchActive = false;
-    touchMode = 'rotate';
-    controls.touches.ONE = THREE.TOUCH.ROTATE;
-    controls.enablePan = false;
-  };
-  window.addEventListener('touchend', windowTouchEndHandler);
+  window.addEventListener('touchend', windowTouchEndHandler, { passive: false });
 
   windowResizeHandler = () => {
     sizes.width = window.innerWidth;
@@ -456,7 +405,7 @@ function removeGlobalEventListeners() {
   if (windowKeyUpHandler) window.removeEventListener('keyup', windowKeyUpHandler);
   if (windowTouchStartHandler) window.removeEventListener('touchstart', windowTouchStartHandler);
   if (windowTouchMoveHandler) window.removeEventListener('touchmove', windowTouchMoveHandler, { passive: false });
-  if (windowTouchEndHandler) window.removeEventListener('touchend', windowTouchEndHandler);
+  if (windowTouchEndHandler) window.removeEventListener('touchend', windowTouchEndHandler, { passive: false });
   if (windowResizeHandler) window.removeEventListener('resize', windowResizeHandler);
 }
 
