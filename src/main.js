@@ -24,6 +24,9 @@ let loadingText;
 let segmentsContainer;
 let enterButton;
 let loadingScreen;
+let prospectOverlay;
+let prospectModal;
+let prospectClose;
 
 let raycasterManager;
 let raycaster;
@@ -100,20 +103,20 @@ let tapWasHovered = false;
 const CAMERA_BOUNDS = {
   minPan: new THREE.Vector3(2.123708182501076,
 0.1,
-0.23236511252797676), // Wide enough to cover the whole cabin
+0.23236511252797676), 
   maxPan: new THREE.Vector3(3.3264561167933016,
 1,
 0.2592356070361481),   
   minZoom: 0.5,                          
-  maxZoom: 5,                             // Allow zooming further out
-  minPolarAngle: Math.PI / 32, // 45 degrees (don't look too far down)
-  maxPolarAngle: Math.PI / 2 - 0.1, // 90 degrees (don't look past the horizon/floor)
-  minAzimuthAngle: Math.PI / 2 + Math.PI / 4, // -45 degrees (left limit)
+  maxZoom: 5,                             
+  minPolarAngle: Math.PI / 32, 
+  maxPolarAngle: Math.PI / 2 - 0.1, 
+  minAzimuthAngle: Math.PI / 2 + Math.PI / 4, 
   maxAzimuthAngle: -Math.PI / 2                 
 };
 
 // --- NEW: WATER & SPLASH SETUP ---
-const waterStreamLength = 0.09; // Change this if the water doesn't perfectly reach the bottom of your sink!
+const waterStreamLength = 0.09; // 
 let waterStream;
 let splashParticles;
 let splashVelocities;
@@ -146,15 +149,18 @@ function bindDomElements() {
   loadingScreen = document.getElementById('loading-screen');
   backBtn = document.getElementById('back-button');
   whiteOverlay = document.getElementById('white-transition-overlay');
+  prospectOverlay = document.getElementById('prospect-overlay');
+  prospectModal = document.getElementById('prospect-modal');
+  prospectClose = document.getElementById('prospect-close');
 }
 
 loadingManager.onProgress = (url, itemsLoaded, itemsTotal) => {
   const progress = (itemsLoaded / itemsTotal) * 100;
   loadingText.innerText = `INITIALIZING... ${Math.floor(progress)}%`;
   
-  // Create the segmented block effect (max 12 blocks for a 320px container)
+
   const numSegments = Math.floor((progress / 100) * 12);
-  segmentsContainer.innerHTML = ''; // Clear old segments
+  segmentsContainer.innerHTML = '';
   
   for (let i = 0; i < numSegments; i += 1) {
     const seg = document.createElement('div');
@@ -177,7 +183,7 @@ function setupScene() {
 }
 
 function setupRendererAndCamera() {
-  scene.background = new THREE.Color('#111111'); // Dark grey background
+  scene.background = new THREE.Color('#111111'); 
 
   camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 100);
   camera.position.set(5.811391771542539, 2.4932501863561063, -3.156645731723698);
@@ -226,6 +232,7 @@ let backBtnClickHandler;
 let btnDownClickHandler;
 let audioBtnClickHandler;
 let enterButtonClickHandler;
+let prospectWindowClickHandler;
 
 function bindUiEventHandlers() {
   if (btnUp && btnDown) {
@@ -252,15 +259,12 @@ function bindUiEventHandlers() {
   if (backBtn) {
         backBtnClickHandler = (event) => {
       event.preventDefault(); 
-      
-      // Play your UI click sound
+
 if (sounds.uiClick) sounds.uiClick.play();
       if (sounds.whoosh) sounds.whoosh.play();
       
-      // 3. Lock camera controls immediately so the user can't interrupt the animation
       controls.enabled = false;
 
-      // 4. Calculate the original starting positions (accounting for mobile)
       const isMobile = window.innerWidth < 768;
       const mobileOffset = isMobile ? 1.5 : 1.0;
       
@@ -275,16 +279,16 @@ if (sounds.uiClick) sounds.uiClick.play();
         z: 0.313789 
       };
 
-      // 5. Animate the camera flying backwards
+
       gsap.to(camera.position, {
         x: startCameraPos.x,
         y: startCameraPos.y,
         z: startCameraPos.z,
-        duration: 2.0, // 2 seconds for a smooth pull-out
+        duration: 2.0, 
         ease: "power3.inOut"
       });
 
-      // 6. Animate the focus target back to center (in case they panned away)
+      
       gsap.to(controls.target, {
         x: startLookAt.x,
         y: startLookAt.y,
@@ -294,26 +298,42 @@ if (sounds.uiClick) sounds.uiClick.play();
         onUpdate: () => controls.update()
       });
 
-      // 7. Sync the White Fade with the camera animation
       if (whiteOverlay) {
         whiteOverlay.style.display = 'block';
-        whiteOverlay.style.pointerEvents = 'auto'; // Block all screen clicks
+        whiteOverlay.style.pointerEvents = 'auto'; 
         
         gsap.to(whiteOverlay, {
           opacity: 1,
-          duration: 2.0, // Matches the 2.0s camera fly-out perfectly
+          duration: 2.0, 
           ease: "power2.inOut",
           onComplete: () => {
-            // Redirect only when the screen is pure white and the camera has stopped
+            
             window.location.href = backBtn.href;
           }
         });
       } else {
-        // Safe fallback just in case the HTML element is missing
+     
         setTimeout(() => { window.location.href = backBtn.href; }, 2000);
       }
      }
     backBtn.addEventListener('click', backBtnClickHandler);
+    
+    prospectWindowClickHandler = () => {
+        if (sounds.uiClick) sounds.uiClick.play();
+        
+        gsap.to(prospectOverlay, {
+          opacity: 0,
+          duration: 0.3,
+          ease: "power2.in",
+          onComplete: () => {
+            prospectOverlay.style.display = 'none';
+            prospectOverlay.style.pointerEvents = 'none';
+          }
+        });
+      }
+    if (prospectClose) {
+      prospectClose.addEventListener('click', prospectWindowClickHandler);
+    }
   }
 
   if (audioBtn) {
@@ -332,6 +352,7 @@ function unbindUiEventHandlers() {
   if (btnDown && btnDownClickHandler) btnDown.removeEventListener('click', btnDownClickHandler);
   if (audioBtn && audioBtnClickHandler) audioBtn.removeEventListener('click', audioBtnClickHandler);
   if (enterButton && enterButtonClickHandler) enterButton.removeEventListener('click', enterButtonClickHandler);
+  if (prospectClose && prospectWindowClickHandler) prospectClose.removeEventListener('click', prospectWindowClickHandler);
 }
 
 function setupRaycasterAndInput() {
@@ -359,16 +380,13 @@ function cleanup() {
 }
 
 function updateCameraConstraints() {
-  // 1. Zoom/Dolly Lock (Using minDistance/maxDistance on OrbitControls)
   controls.minDistance = CAMERA_BOUNDS.minZoom;
   controls.maxDistance = CAMERA_BOUNDS.maxZoom;
 
-  // 2. Movement/Pan Lock
-  // Only allow panning if SHIFT is pressed
+
   const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
   controls.enablePan = shiftPressed || isTouchDevice;
 
-  // 3. Clamp the Pan boundaries so user can't wander off into the void
   controls.target.clamp(CAMERA_BOUNDS.minPan, CAMERA_BOUNDS.maxPan);
 
   controls.minPolarAngle = CAMERA_BOUNDS.minPolarAngle;
@@ -383,7 +401,6 @@ function adjustHudForMobile() {
     hud.style.fontSize = '12px';
     hud.style.padding = '6px 12px';
   } else {
-    // Reset to default
     hud.style.fontSize = '';
     hud.style.padding = '';
   }
@@ -411,10 +428,16 @@ function handleRaycasterInteraction() {
   const targetMesh = object.userData.targets?.[0];
   if (!targetMesh) return;
 
+  if (object.name.includes('Pot')) {
+    if (sounds.uiClick) playSpatialSound(sounds.uiClick, object);
+    if (typeof window.openProspectModal === 'function') {
+      window.openProspectModal();
+    }
+    return; 
+  }
   if (currentType === 'socialLink') {
     if (sounds.uiClick) playSpatialSound(sounds.uiClick, targetMesh);
-    window.open(object.userData.url, '_blank'); // Opens in a new tab
-    return; // Stop the rest of the function
+    window.open(object.userData.url, '_blank'); 
   }
   const definition = interactionDefinitions[currentType];
   if (!definition) return;
@@ -424,7 +447,25 @@ function handleRaycasterInteraction() {
 }
 
 const keys = { w: false, a: false, s: false, d: false, q: false, e: false };
-const moveSpeed = 3.0; // Units per second
+const moveSpeed = 3.0; 
+
+window.openProspectModal = () => {
+    if (!prospectOverlay) return;
+    
+    if (sounds.uiClick) sounds.uiClick.play();
+    
+    prospectOverlay.style.display = 'block';
+    prospectOverlay.style.pointerEvents = 'auto'; // Block clicks to the 3D scene
+    
+    // Fade in background
+    gsap.to(prospectOverlay, { opacity: 1, duration: 0.3, ease: "power2.out" });
+    
+    // Scale "pop" effect for the modal
+    gsap.fromTo(prospectModal, 
+      { scale: 0.9 }, 
+      { scale: 1, duration: 0.4, ease: "back.out(1.5)" }
+    );
+  };
 
 function setupGlobalEventListeners() {
   windowKeyDownHandler = (event) => {
@@ -561,16 +602,14 @@ function handleTapHoverState(valveHitbox, bodyHitbox, isHovered) {
 
 // --- AUTO-FIT HUD TEXT FUNCTION ---
 function fitTextToBox(container, textElement) {
-  const maxFontSize = 12; // Your default desktop size
-  const minFontSize = 10; // The absolute smallest it should get
+  const maxFontSize = 12; 
+  const minFontSize = 10; 
 
-  // 1. Reset to max size before calculating
   textElement.style.fontSize = maxFontSize + 'px';
 
-  // 2. Measure and shrink loop
   let currentSize = maxFontSize;
   
-  // scrollWidth is the actual width of the text. clientWidth is the width of the box.
+
   while (textElement.scrollWidth > container.clientWidth && currentSize > minFontSize) {
     currentSize--;
     textElement.style.fontSize = currentSize + 'px';
@@ -610,7 +649,7 @@ function handleHoverInteraction(hitbox, isHovered) {
     if (hitbox.name.includes('laptop_screen')) {
       info = "Check out my programing/3D modeling skillsets!";
     }
-    if (hitbox.name.includes('Pot')) {
+    if (hitbox.name.includes('Pot') || hitbox.name.includes('pot_lid')) {
       info = "See what I am cooking next!";
     }
     if (hitbox.name.includes('wardrobe')) {
@@ -684,18 +723,17 @@ function getSquarePosition(square) {
   const file = square.charCodeAt(0) - 97; // 'a' -> 0, 'h' -> 7
   const rank = parseInt(square[1]) - 1;   // '1' -> 0, '8' -> 7
   
-  const squareSize = 0.027;  // The physical width of one square on your board
+  const squareSize = 0.027; 
   const startX = 2.63;     // The X coordinate of the 'a' file
   const startZ = -0.905;      // The Z coordinate of the '1' rank
 
   return {
     x: startX - (file * squareSize),
-    z: startZ + (rank * squareSize) // Z usually goes negative as you move 'up' the board
+    z: startZ + (rank * squareSize) 
   };
 }
 
 function playMove(moveIndex) {
-  // If game is over, reset after a 3 second delay
   if (moveIndex >= history.length) {
     gsap.delayedCall(3, resetChessGame);
     return;
@@ -706,21 +744,19 @@ function playMove(moveIndex) {
   const targetPos = getSquarePosition(move.to);
   const isKnight = move.piece === 'n';
 
-  // Create a GSAP timeline for this specific turn
+
   const tl = gsap.timeline({ 
-    onComplete: () => gsap.delayedCall(0.5, () => playMove(moveIndex + 1)) // 0.5s pause between turns
+    onComplete: () => gsap.delayedCall(0.5, () => playMove(moveIndex + 1))
   });
 
-  // 1. HANDLE CAPTURES (Run simultaneously with the move)
+  //HANDLE CAPTURES
   if (move.captured) {
-    const capturedMesh = currentBoardState[move.to]; // Get the piece sitting on the target square
+    const capturedMesh = currentBoardState[move.to]; 
     
     if (capturedMesh) {
       const isBlack = capturedMesh.userData.color === 'b';
       
-      // Black goes right (+X), White goes left (-X). Adjust these values based on your room layout!
       const graveyardX = isBlack ? 2.455 - 0.045: 2.455 + 0.2; 
-      // Stack them neatly based on how many are dead
       const graveyardZ = isBlack ? (deadBlackCount) : (deadWhiteCount); 
 
       tl.to(capturedMesh.position, {
@@ -728,17 +764,16 @@ function playMove(moveIndex) {
         z: graveyardZ,
         duration: 0.6,
         ease: "power2.inOut"
-      }, 0); // The '0' forces this to start at the exact beginning of the timeline
+      }, 0);
 
       if (isBlack) deadBlackCount += 0.023; else deadWhiteCount -= 0.023;
     }
   }
 
-  // 2. HANDLE MOVEMENT
+  //HANDLE MOVEMENT
   if (isKnight) {
-    // Knights jump: Animate Y up and down, while simultaneously sliding X and Z
     tl.to(activeMesh.position, { 
-      y: activeMesh.userData.initialPosition.y + 0.1, // Jump height
+      y: activeMesh.userData.initialPosition.y + 0.1, 
       duration: 0.3, 
       yoyo: true, 
       repeat: 1, 
@@ -746,15 +781,13 @@ function playMove(moveIndex) {
     }, 0);
     tl.to(activeMesh.position, { x: targetPos.x, z: targetPos.z, duration: 0.6, ease: "power1.inOut" }, 0);
   } else {
-    // Everyone else slides flat on the board
     tl.to(activeMesh.position, { x: targetPos.x, z: targetPos.z, duration: 0.6, ease: "power1.inOut" }, 0);
   }
 
   if (move.flags.includes('k') || move.flags.includes('q')) {
     const isWhite = move.color === 'w';
     const isKingside = move.flags.includes('k');
-    
-    // Deduce the Rook's start and end squares based on color and side
+
     let rookFrom, rookTo;
     
     if (isWhite) {
@@ -770,34 +803,30 @@ function playMove(moveIndex) {
     if (rookMesh) {
       const rookTargetPos = getSquarePosition(rookTo);
       
-      // Animate the Rook sliding over at the exact same time as the King
       tl.to(rookMesh.position, {
         x: rookTargetPos.x,
         z: rookTargetPos.z,
         duration: 0.6,
         ease: "power1.inOut"
-      }, 0); // The '0' makes it run concurrently with the King's animation
+      }, 0); 
       
-      // Update internal state for the Rook
       currentBoardState[rookTo] = rookMesh;
       delete currentBoardState[rookFrom];
     }
   }
 
-  // 3. UPDATE INTERNAL STATE
+  //UPDATE INTERNAL STATE
   currentBoardState[move.to] = activeMesh;
   delete currentBoardState[move.from];
 }
 
-// Start the game!
 gsap.delayedCall(2, () => playMove(0));
 
 function resetChessGame() {
   const tl = gsap.timeline({
-    onComplete: () => gsap.delayedCall(2, () => playMove(0)) // Restart game after resetting
+    onComplete: () => gsap.delayedCall(2, () => playMove(0)) 
   });
   
-  // Grab all 32 original pieces
   Object.values(chessPieces).forEach((piece) => {
     tl.to(piece.position, {
       x: piece.userData.initialPosition.x,
@@ -805,10 +834,10 @@ function resetChessGame() {
       z: piece.userData.initialPosition.z,
       duration: 1.5,
       ease: "power3.inOut"
-    }, 0); // All fly back simultaneously
+    }, 0); 
   });
 
-  // Reset internal tracking memory
+
   currentBoardState = { ...chessPieces };
   deadWhiteCount = -0.5 * 1.4;
   deadBlackCount = -0.66429 * 1.4;
@@ -857,7 +886,6 @@ async function init() {
   // --- ATTACH SOAP BUBBLES TO SOAP MESH ---
   const soapHitbox = interactables.find(h => h.userData.type === 'soap');
   if (soapHitbox && soapHitbox.userData.targets && soapHitbox.userData.targets.length > 0) {
-    // Attach the bubble particle group directly to the visual soap mesh
     soapHitbox.userData.targets[0].add(bubbleGroup);
   }
   currentBoardState = { ...chessPieces };
@@ -894,17 +922,16 @@ async function init() {
   }
   if (potLid) {
     gsap.to(potLid.position, {
-      y: potLid.userData.initialPosition.y + 0.002, // Hop height
+      y: potLid.userData.initialPosition.y + 0.002, 
       duration: 0.12, 
       yoyo: true,
       repeat: -1,
       ease: "sine.inOut"
     });
-    // Smooth tilting/clattering
     gsap.to(potLid.rotation, {
       x: potLid.userData.initialRotation.x + 0.05,
       z: potLid.userData.initialRotation.z - 0.05,
-      duration: 0.09, // Slightly out of sync with position for organic feel
+      duration: 0.09, 
       yoyo: true,
       repeat: -1,
       ease: "sine.inOut"
@@ -921,7 +948,7 @@ async function init() {
           if (!mesh.userData.initialRot) mesh.userData.initialRot = mesh.rotation.clone();
           
           const isTarget = hitbox.name.includes('target');
-          mesh.scale.set(0, 0, 0); // Hide them initially
+          mesh.scale.set(0, 0, 0);
 
           if (!isTarget) {
             mesh.rotation.y = mesh.userData.initialRot.y - Math.PI;
@@ -952,11 +979,11 @@ async function init() {
     });
   }
 
-// --- 3. REVEAL ENTER BUTTON ---
+//REVEAL ENTER BUTTON
   const loadingContainer = document.getElementById('loading-bar-container');
   const introBox = document.getElementById('intro-text-box'); 
   
-  // Smoothly fade out the loading text and segments
+
   gsap.to([loadingText, loadingContainer], {
     opacity: 0,
     duration: 0.8,
@@ -965,7 +992,7 @@ async function init() {
       loadingText.style.display = 'none';
       if (loadingContainer) loadingContainer.style.display = 'none';
       
-      // Reveal the original Enter Button
+
       if (enterButton) {
         enterButton.style.display = 'block';
         gsap.to(enterButton, { opacity: 1, duration: 0.5 });
@@ -975,22 +1002,19 @@ async function init() {
 
   let hasStarted = false;
 
-  // --- 4. THE GRAND ENTRANCE EVENT ---
-// --- 4. THE GRAND ENTRANCE EVENT ---
+//ENTRANCE EVENT
   if (enterButton) {
     enterButton.addEventListener('click', () => {
 
       if (hasStarted) return; 
       hasStarted = true;
 
-      // 1. Instantly remove enter button
       gsap.to(enterButton, { 
         opacity: 0, 
         duration: 0.5, 
         onComplete: () => enterButton.style.display = 'none' 
       });
 
-      // 2. Play Audio 
       if (sounds.uiClick) sounds.uiClick.play();
       gsap.delayedCall(0.8, () => {
         if (sounds.whoosh) sounds.whoosh.play();
@@ -1002,7 +1026,6 @@ async function init() {
       const toggleBtn = document.getElementById('audio-toggle');
       if (toggleBtn) toggleBtn.innerText = 'TURN: OFF';
 
-      // 3. Fade out Black Screen (Takes 2.0s)
       gsap.to(loadingScreen, {
         opacity: 0,
         duration: 2.0, 
@@ -1012,7 +1035,6 @@ async function init() {
         }
       });
 
-      // 4. Start Camera Fly-in (Takes 3.5s)
       const finalCameraPos = { x: 2.7398029971484745, y: 0.8794004125894785, z: -2.9957373670464307 };
       const finalLookAt = { x: 2.5546474760257314, y: 0.002700000017881676, z: 0.3137892400795657 };
 
@@ -1026,54 +1048,42 @@ async function init() {
         duration: 3.5, ease: "power3.inOut",
         onUpdate: () => controls.update(),
         onComplete: () => {
-          controls.enabled = true; // Unlock camera ONLY when it stops
+          controls.enabled = true; 
         }
       });
 
-      // 5. Trigger Pop-ins (Starts independently at 2.5s)
       playPopInSequence(1.5, 0.1); 
 
-      // 6. Trigger Intro Box (Starts independently at 4.5s)
-// 6. Trigger Intro Box Sequence (Starts independently at 4.5s)
       if (introBox) {
         gsap.delayedCall(4.5, () => {
           introBox.style.display = 'block'; 
-          
-          // Set the initial text before the animation starts
+       
           introBox.innerText = "hold shift + left hold to move camera"; 
           
-          // Create a timeline to chain the animations perfectly
+
           const textTimeline = gsap.timeline();
           
           textTimeline
-            // 1. Fade IN first message
+
             .to(introBox, { opacity: 1, duration: 1.2, ease: "power2.out" })
             
-            // 2. Fade OUT first message (the "+=3.0" makes it wait 3 seconds before fading out)
+
             .to(introBox, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, "+=3.0")
-            
-            // 3. Swap the text instantly while it is completely invisible
             .call(() => {
               introBox.innerText = "use WASD + QE to move camera"; 
             })
-            // 1. Fade IN first message
             .to(introBox, { opacity: 1, duration: 1.2, ease: "power2.out" })
             
-            // 2. Fade OUT first message (the "+=3.0" makes it wait 3 seconds before fading out)
             .to(introBox, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, "+=3.0")
-            
-            // 3. Swap the text instantly while it is completely invisible
+
             .call(() => {
               introBox.innerText = "or use two fingers to move camera on mobile"; 
             })
             
-            // 4. Fade IN second message
+
             .to(introBox, { opacity: 1, duration: 1.2, ease: "power2.out" })
             
-            // 5. Fade OUT second message (wait another 3 seconds)
             .to(introBox, { opacity: 0, duration: 0.5, ease: "power2.inOut" }, "+=3.0")
-            
-            // 6. Hide it completely from the DOM when the entire sequence is finished
             .call(() => {
               introBox.style.display = 'none';
             });
@@ -1082,12 +1092,12 @@ async function init() {
     });
   }
     
-  // 3. The Animation Loop
+  //The Animation Loop
   const render = () => {
     // console.log(camera.position);
     // console.log("00000");
     // console.log(controls.target);
-    const delta = clock.getDelta(); // Use delta time for consistent speed across frame rates
+    const delta = clock.getDelta();
     const elapsedTime = clock.getElapsedTime();
     if (rgbUniforms) {
     rgbUniforms.uTime.value = clock.getElapsedTime(); // Animates the RGB wave
@@ -1095,32 +1105,29 @@ async function init() {
     //spritesheet animations
     if (steamTexture) {
       const totalFrames = 5;
-      const fps = 5; // Animation speed
+      const fps = 5; 
 
-      // Calculate which of the 10 frames to show based on elapsed time
+     
       const currentFrame = Math.floor(elapsedTime * fps) % totalFrames;
       
-      // Shift the texture to the right by Exactly 10% (640px / 6400px) per frame
+     
       steamTexture.offset.x = currentFrame / totalFrames;
     }
     if (fireTexture) {
       const totalFrames = 10;
-      const fps = 15; // Animation speed
+      const fps = 15; 
 
-      // Calculate which of the 10 frames to show based on elapsed time
+
       const currentFrame = Math.floor(elapsedTime * fps) % totalFrames;
       
-      // Shift the texture to the right by Exactly 10% (640px / 6400px) per frame
       fireTexture.offset.x = currentFrame / totalFrames;
     }
     if (laptopScreenTexture) {
       const totalFrames = 102;
-      const fps = 10; // Exactly 10 frames per second
+      const fps = 10;
       
-      // Calculate which of the 102 frames to show based on elapsed time
       const currentFrame = Math.floor(elapsedTime * fps) % totalFrames;
       
-      // Shift the texture horizontally
       laptopScreenTexture.offset.x = currentFrame / totalFrames;
     }
     //idle animations
@@ -1131,7 +1138,7 @@ async function init() {
           blade.rotation.x += 2.0 * delta;
         }
         else if (blade.name.includes('2') || blade.name.includes('3')) {
-          blade.rotateX(-2 * delta); // Adjust '2.0' to change speed. Change '.z' to '.y' or '.x' depending on model orientation.
+          blade.rotateX(-2 * delta);
         }
         else if (blade.name.includes('4'))
         {
@@ -1148,11 +1155,11 @@ async function init() {
     document.body.style.cursor = intersects.length > 0 && intersects[0].object.name.includes('target') ? 'pointer' : 'default';
     const hoveredObject = intersects.length > 0 ? intersects[0].object : null;
 
-    // Only show HUD if we hit an object with a 'target' name
+
     const hoveredHitbox = intersects.length > 0 ? intersects[0].object : null;
     if (hoveredHitbox?.name.includes('target')) {
       
-      // Position the HUD near the cursor (with a small offset)
+
       hud.style.left = ((pointer.x + 1) * sizes.width) / 2 + 20 + 'px';
       hud.style.top = ((-pointer.y + 1) * sizes.height) / 2 + 'px';
     } else {
@@ -1170,24 +1177,20 @@ async function init() {
       handleHoverInteraction(hitbox, isHovered);
     });
 
-    // 3. SOAP & BUBBLES CONTINUOUS PHYSICS
-    // Check if any soap hitbox is hovered
+    //SOAP & BUBBLES CONTINUOUS PHYSICS
     const soapIsHovered = interactables.some(h => h.userData.type === 'soap' && h.userData.isHovered);
 
     bubblesData.forEach((data) => {
       const sprite = data.sprite;
       
-      // Spawning
       if (soapIsHovered && sprite.position.y < -10) {
         if (Math.random() > 0.9) { 
-          // Spawn bubbles using local coordinates relative to the soap's origin
           sprite.position.set(
             (Math.random() - 0.5) * 0.1, 
-            0.05 + Math.random() * 0.05, // Shifted up by 0.05 local units to spawn on top
+            0.05 + Math.random() * 0.05, 
             (Math.random() - 0.5) * 0.1  
           );
 
-          // Pop out 0.2 to 0.4 local units above the soap
           data.popHeight = 0.2 + (Math.random() * 0.2);
         }
       }
@@ -1209,13 +1212,11 @@ async function init() {
       for (let i = 0; i < splashCount; i++) {
         const i3 = i * 3;
 
-        // Apply velocity and gravity
         positions[i3] += splashVelocities[i].x;
         positions[i3 + 1] += splashVelocities[i].y;
         positions[i3 + 2] += splashVelocities[i].z;
         splashVelocities[i].y -= 0.005; // Gravity pull
 
-        // Reset particle if it falls below the sink level
         if (positions[i3 + 1] < -0.1) {
           positions[i3] = 0;
           positions[i3 + 1] = 0;
@@ -1225,7 +1226,6 @@ async function init() {
       }
       splashParticles.geometry.attributes.position.needsUpdate = true;
     } else {
-      // Hide particles completely when tap is off
       const positions = splashParticles.geometry.attributes.position.array;
       for (let i = 0; i < splashCount * 3; i++) positions[i] = 0;
       splashParticles.geometry.attributes.position.needsUpdate = true;
@@ -1233,12 +1233,12 @@ async function init() {
 
     // --- KEYBOARD MOVEMENT LOGIC ---
     const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward); // Get the direction camera is looking
-    forward.y = 0; // Prevent flying into the sky when looking up
+    camera.getWorldDirection(forward); 
+    forward.y = 0; 
     forward.normalize();
 
     const right = new THREE.Vector3();
-    right.crossVectors(camera.up, forward).normalize(); // Calculate right vector
+    right.crossVectors(camera.up, forward).normalize(); 
 
     const moveVec = new THREE.Vector3();
 
@@ -1246,21 +1246,18 @@ async function init() {
     if (keys.s) moveVec.sub(forward);
     if (keys.a) moveVec.add(right);
     if (keys.d) moveVec.sub(right);
-    if (keys.e) moveVec.y += 1; // Up
-    if (keys.q) moveVec.y -= 1; // Down
+    if (keys.e) moveVec.y += 1; 
+    if (keys.q) moveVec.y -= 1;
 
-    // Normalize to prevent faster diagonal movement, then scale by speed and delta
     if (moveVec.length() > 0) {
       moveVec.normalize().multiplyScalar(moveSpeed * delta);
 
-      // Apply movement to BOTH camera and OrbitControls target to prevent snapping
       camera.position.add(moveVec);
       controls.target.add(moveVec);
     }
-    // Update 3D audio listener to match Camera Position & Rotation
     updateListener(camera);
     updateCameraConstraints();
-    controls.update(); // Required for damping
+    controls.update();
     PostProcessing.render();
     window.requestAnimationFrame(render);
   };

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// 1. Updated texture map with all five baked textures
+
 const textureMap = {
   first: '/textures/bakeone.webp',
   second: '/textures/baketwo.webp',
@@ -25,7 +25,7 @@ export function createTextureLibrary(textureLoader) {
   };
 }
 
-// 2. Stripped down loader function with unnecessary parameters removed
+
 export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, interactables, chessPieces, floor_objs }) {
   const fireTexture = new THREE.TextureLoader().load('/images/fire.png');
   fireTexture.colorSpace = THREE.SRGBColorSpace;
@@ -52,7 +52,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
         let potLid = null;
         let rockingChair = null;
         glb.scene.traverse((child) => {
-          // Ignore anything that isn't a mesh (like cameras, lights, or empties)
           if (!child.isMesh) {
             return;
           }
@@ -69,8 +68,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
            if (nameLower.includes('cabinet_door')) {
               type = 'cabinet';
               
-              // Extract the ID (e.g., "cabinet_door_1" from "kitchen_cabinet_door_1_left_swing_fifth_raycaster")
-              // We grab everything up to the first direction tag
               const baseMatch = targetName.toLowerCase().match(/(.*cabinet_door_\d+)/);
               const baseName = baseMatch ? baseMatch[0] : targetName.toLowerCase().replace('_raycaster', '');
 
@@ -82,7 +79,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
                 
                 const n = node.name.toLowerCase();
                 
-                // Match objects that contain our base name AND either _left or _right
                 const isLeft = n.includes(baseName) && n.includes('_left');
                 const isRight = n.includes(baseName) && n.includes('_right');
                 
@@ -108,7 +104,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
                 Axis = 'y';
               }
               
-              // Find the object: ensure we target the highest parent if available
               targets.push(targetObj);
             }
             else if (child.name.includes('tap_valve')) {
@@ -164,7 +159,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
                 child.userData.url = 'https://www.chess.com/member/moisturized_potato';
               }
 
-              // Push the target object so the interaction script knows what mesh to click/animate
               targets.push(targetObj);
             }
              else if (child.name.includes('scale_up') && !child.name.includes('pot')) {
@@ -180,7 +174,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               targets.push(child);
             }
 
-            // Automate initial rotation saving for everything we collected
             targets.forEach(t => {
               const info = t.name.replace(/_/g, ' '); 
               if (!t.userData.swingDirection) t.userData.swingDirection = 1;
@@ -193,7 +186,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
             
               t.userData.initialQuaternion = t.quaternion.clone();
             
-              // NEW
               t.userData.customAngle = 0;
             });
 
@@ -208,7 +200,7 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
             interactables.push(child);
           }
 
-          // Check if this mesh's name contains any of our texture tags
+
           let matchedKey = null;
           Object.keys(textureMap).forEach((key) => {
             if (child.name.includes(key)) {
@@ -231,23 +223,22 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
                   uniform float uTime;
                   varying vec2 vUv;
                   void main() {
-                    // Generates a smooth, continuous RGB shifting wave
                     vec3 rgb = 0.5 + 0.5 * cos(uTime * 2.0 + vUv.xyx * 5.0 + vec3(0.0, 2.0, 4.0));
                     gl_FragColor = vec4(rgb, 1.0);
                   }
                 `,
                 side: THREE.DoubleSide
               });
-              return; // Skip other material checks
+              return; 
             }
             else if (child.name.includes('blade')) {
               child.material = new THREE.MeshStandardMaterial({
                 map: matchedKey ? loadedTextures[matchedKey] : null,
-                emissive: 0xffffff, // Color of the glow
-                emissiveIntensity: 0.2, // Slight emission strength
+                emissive: 0xffffff,
+                emissiveIntensity: 0.2,
                 transparent: true
               });
-              blades.push(child); // Save reference for animation
+              blades.push(child); 
               return;
             }
           }
@@ -256,9 +247,9 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               map: fireTexture,
               transparent: true,
               alphaTest: 0.05,
-              side: THREE.DoubleSide, // Renders on both sides of the plane
-              depthWrite: false,      // Prevents Z-fighting/sorting issues with overlapping planes
-              blending: THREE.AdditiveBlending // Makes the fire glow naturally
+              side: THREE.DoubleSide, 
+              depthWrite: false,      
+              blending: THREE.AdditiveBlending 
             });
             child.renderOrder = 999;
             child.scale.set(0.07, 0.075, 0.075);
@@ -269,9 +260,9 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
               map: steamTexture,
               transparent: true,
               alphaTest: 0.05,
-              side: THREE.DoubleSide, // Renders on both sides of the plane
-              depthWrite: false,      // Prevents Z-fighting/sorting issues with overlapping planes
-              blending: THREE.AdditiveBlending // Makes the fire glow naturally
+              side: THREE.DoubleSide, 
+              depthWrite: false,     
+              blending: THREE.AdditiveBlending 
             });
             child.renderOrder = 999;
             child.scale.set(0.07, 0.075, 0.075);
@@ -293,7 +284,7 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
           }
           else if (child.name.toLowerCase().includes('glass')) {
               child.material = new THREE.MeshPhysicalMaterial({
-              map: matchedKey ? loadedTextures[matchedKey] : null, // Mixes baked texture with glass
+              map: matchedKey ? loadedTextures[matchedKey] : null, 
               color: 0x86562b,
               metalness: 0,
               roughness: 0.1,
@@ -320,8 +311,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
           else if (matchedKey) {
             const textureToUse = loadedTextures[matchedKey];
 
-            // Using MeshBasicMaterial because "baked" textures already contain lighting data.
-            // Change this to MeshStandardMaterial if you plan to add real-time 3D lights.
             child.material = new THREE.MeshBasicMaterial({
               map: textureToUse,
               transparent: true
@@ -366,7 +355,6 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
           if (child.name.includes("trees_double")){
             if (child.material) child.material.side = THREE.DoubleSide;
           }
-            // Ensure crisp rendering
             if (child.material.map) {
               child.material.map.minFilter = THREE.LinearFilter;
             }
@@ -382,15 +370,13 @@ export function loadCabin({ scene, gltfLoader, textureMap, loadedTextures, inter
           }
         });
 
-        // Add the fully textured model to the scene
         scene.add(glb.scene);
         
-        // Resolve the promise so your main.js knows it finished loading
         resolve({glb, rgbUniforms, blades, ac_flap, pot, potLid, fireTexture, rockingChair, steamTexture, interactables,
            chessPieces, floor_objs, laptopScreenTexture }); // tapBody, tapValve, soap, cabinetDoors, oven1, oven2
       },
-      undefined, // onProgress callback (optional)
-      reject     // onError callback
+      undefined,
+      reject    
     );
   });
 }

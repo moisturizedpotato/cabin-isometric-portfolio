@@ -106,7 +106,6 @@ body {
   z-index: 9999; 
   pointer-events: none; 
   
-  /* Start hidden */
   display: none; 
   
   /* Box Dimensions */
@@ -118,20 +117,16 @@ body {
   background-size: 100% 100%; /* Forces the image to stretch to exactly 300x150 */
   background-repeat: no-repeat;
 
-  /* FLEXBOX LOGIC: This centers the text vertically inside the box */
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
   
-  /* THE SAFE ZONE: Tweak these 4 numbers until the text sits exactly inside the frame */
-  /* Top, Right, Bottom, Left (Left is largest to push past the tail) */
+
   padding: 20px 20px 20px 125px; 
   box-sizing: border-box;
   
-  /* Hard stop: prevents text from physically rendering outside the div */
   overflow: hidden; 
   
-  /* Typography */
   color: #202020;
   font-family: 'Courier New', Courier, monospace;
   #hud-text {
@@ -143,8 +138,8 @@ body {
 
 @media screen and (max-width: 768px) {
   #hover-hud {
-    padding: 6px 12px;      /* Smaller padding */
-    font-size: 12px;        /* Force smaller font for mobile */
+    padding: 6px 12px;     
+    font-size: 12px;       
     border-radius: 3px;
   }
     #hud-text {
@@ -179,7 +174,7 @@ body {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: #ffffff; /* Deep black background */
+  background-color: #ffffff;
   z-index: 99999;
   display: flex;
   justify-content: center;
@@ -243,86 +238,165 @@ body {
   color: #ffffff;
 }
 
-/* Add this to your style.scss */
+
 #back-button {
   position: fixed;
   top: 20px;
   left: 20px;
-  z-index: 1000; /* Keeps it above the 3D canvas */
+  z-index: 1000;
   cursor: pointer;
   opacity: 0.8;
   transition: transform 0.2s ease, opacity 0.2s ease;
-  
-  /* Hides the button during the loading screen */
+
   display: block; 
 }
 
 #back-button:hover {
-  transform: scale(1.1); /* Slight pop effect on hover */
+  transform: scale(1.1);
   opacity: 1.0;
 }
 
 #back-button img {
-  width: 40px; /* Adjust this value if your arrow png is too big/small */
+  width: 40px; 
   height: auto;
   scale: 1.5;
-  filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5)); /* Adds a shadow so it stands out against bright backgrounds */
+  filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5)); 
 }
 
-/* Add this to style.scss */
 #white-transition-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background-color: #ffffff; /* Pure white */
-  z-index: 999999; /* Higher than the loading screen and back button */
+  background-color: #ffffff; 
+  z-index: 999999;
   
   opacity: 0;
   display: none; 
-  pointer-events: none; /* Ensures it doesn't block the screen while invisible */
+  pointer-events: none; 
 }
 
-/* Add this to style.scss */
+
 #intro-text-box {
   position: absolute;
   top: 80%;
   left: 50%;
   transform: translate(-50%, -50%);
   
-  /* Matches the dark, slightly transparent background */
+
   background: rgba(25, 25, 25, 0.85); 
   
-  /* The subtle grey/white border */
+
   border: 1px solid rgba(255, 255, 255, 0.25); 
   border-radius: 12px; 
   
-  /* Text styling */
+
   color: #ffffff;
   font-family: sans-serif;
   font-size: 16px;
   letter-spacing: 0.5px;
   padding: 14px 28px;
   
-  /* Layout & Interaction */
+
   text-align: center;
   white-space: nowrap;
   cursor: pointer;
   z-index: 1000;
   
-  /* Start hidden for the GSAP fade-in */
+
   display: none; 
   opacity: 0; 
   
-  /* Optional: Adds a slight blur to whatever is behind the box */
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-/* Adds a subtle interaction feedback when they hover to "knock" */
 #intro-text-box:hover {
   background: rgba(40, 40, 40, 0.95);
   border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* --- FUTURE PROSPECTS MODAL --- */
+#prospect-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4); 
+  z-index: 99999;
+
+  display: none;
+  opacity: 0;
+  pointer-events: none; 
+}
+
+#prospect-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  max-width: 480px;
+  
+  /* Glassmorphism Effect */
+  background: rgba(25, 20, 35, 0.85); 
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 40px 30px 30px 30px;
+  
+  color: #ffffff;
+  font-family: sans-serif;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6);
+  opacity: 0.9;
+}
+
+#prospect-close {
+  position: absolute;
+  top: 15px;
+  left: 20px; 
+  font-size: 20px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+#prospect-close:hover {
+  color: #ffffff;
+}
+
+#prospect-modal h2 {
+  text-align: center;
+  margin: 0 0 15px 0;
+  font-size: 22px;
+  letter-spacing: 2px;
+  font-weight: 800;
+}
+
+.prospect-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin-bottom: 25px;
+}
+
+.prospect-list {
+  list-style-type: square; 
+  padding-left: 25px;
+  margin: 0;
+}
+
+.prospect-list li {
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 25px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.prospect-list li:last-child {
+  margin-bottom: 0;
 }
